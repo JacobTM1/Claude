@@ -24,6 +24,16 @@ jobs:
             echo "::notice::TestFlight secrets not configured yet — skipping upload. Add APP_STORE_CONNECT_KEY, APP_STORE_CONNECT_KEY_ID, APP_STORE_CONNECT_ISSUER_ID and APPLE_TEAM_ID in repo Settings → Secrets and variables → Actions."
           fi
 
+      - name: Select latest Xcode
+        if: steps.check.outputs.configured == 'true'
+        run: |
+          echo "Installed Xcode versions:"
+          ls -d /Applications/Xcode*.app
+          LATEST=$(ls -d /Applications/Xcode_*.app | sort -t_ -k2 -n | tail -1)
+          echo "Selecting: $LATEST"
+          sudo xcode-select -s "$LATEST/Contents/Developer"
+          xcodebuild -version
+
       - name: Write App Store Connect API key
         if: steps.check.outputs.configured == 'true'
         env:
