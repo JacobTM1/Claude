@@ -11,7 +11,15 @@ struct HomeView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                AuroraBackground(colors: [.indigo, .purple], intensity: 0.8)
+                AuroraBackground(colors: [.indigo, .purple], intensity: 1.15)
+
+                // Slow-drifting motes of light — the room feels alive before
+                // a single tap.
+                ParticleFieldView(
+                    motion: .drift,
+                    tint: Color(red: 0.72, green: 0.76, blue: 1.0),
+                    count: 22
+                )
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 24) {

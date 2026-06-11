@@ -247,16 +247,52 @@ struct SessionView: View {
 
             Spacer()
 
-            Text(formatTime(max(remainingSeconds, 0)))
-                .font(.system(size: 40, weight: .light, design: .rounded))
-                .foregroundStyle(.white.opacity(0.9))
-                .monospacedDigit()
+            timerPill
 
             controls
                 .padding(.top, 18)
                 .padding(.bottom, 28)
         }
         .padding(.horizontal, 20)
+    }
+
+    /// Remaining time as a soft glass pill with a slim progress ring —
+    /// quieter and more organic than bare digits.
+    private var timerPill: some View {
+        let total = Double(durationMinutes * 60)
+        let progress = total > 0 ? 1.0 - Double(max(remainingSeconds, 0)) / total : 0
+
+        return HStack(spacing: 12) {
+            ZStack {
+                Circle()
+                    .stroke(.white.opacity(0.14), lineWidth: 3)
+                Circle()
+                    .trim(from: 0, to: progress)
+                    .stroke(
+                        LinearGradient(
+                            colors: mode.colors,
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        style: StrokeStyle(lineWidth: 3, lineCap: .round)
+                    )
+                    .rotationEffect(.degrees(-90))
+                    .animation(.linear(duration: 1), value: progress)
+            }
+            .frame(width: 26, height: 26)
+
+            Text(formatTime(max(remainingSeconds, 0)))
+                .font(.system(.title3, design: .rounded).weight(.light))
+                .foregroundStyle(.white.opacity(0.92))
+                .monospacedDigit()
+
+            Text("remaining")
+                .font(.footnote)
+                .foregroundStyle(.white.opacity(0.45))
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 11)
+        .glassCard(cornerRadius: 26)
     }
 
     private var controls: some View {
