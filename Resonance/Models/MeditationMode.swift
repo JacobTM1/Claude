@@ -10,6 +10,8 @@ import SwiftUI
 struct MeditationMode: Identifiable {
     let name: String
     let tagline: String
+    /// Mode-specific posture cue shown during the pre-session countdown.
+    let settleText: String
     let icon: String
     let colors: [Color]
 
@@ -40,6 +42,7 @@ struct MeditationMode: Identifiable {
         MeditationMode(
             name: "Deep Meditation",
             tagline: "Sink beneath the surface of thought",
+            settleText: "Sit tall, rest your hands on your thighs,\nand let your eyes close.",
             icon: "sparkles",
             colors: [.indigo, .purple],
             carrierHz: 200,
@@ -60,6 +63,7 @@ struct MeditationMode: Identifiable {
         MeditationMode(
             name: "Focus & Clarity",
             tagline: "Sharpen attention for deep work",
+            settleText: "Sit upright, take one decisive breath,\nand choose your single point of focus.",
             icon: "scope",
             colors: [.cyan, .blue],
             carrierHz: 240,
@@ -78,6 +82,7 @@ struct MeditationMode: Identifiable {
         MeditationMode(
             name: "Calm & De-stress",
             tagline: "Unwind the day in ten minutes",
+            settleText: "Drop your shoulders, unclench your jaw,\nand let the chair hold your weight.",
             icon: "leaf.fill",
             colors: [.teal, .green],
             carrierHz: 220,
@@ -96,6 +101,7 @@ struct MeditationMode: Identifiable {
         MeditationMode(
             name: "Deep Sleep",
             tagline: "Drift down into slow waves",
+            settleText: "Lie down, let your body get heavy,\nand let the day end here.",
             icon: "moon.stars.fill",
             colors: [.blue, .indigo],
             carrierHz: 150,
@@ -114,6 +120,7 @@ struct MeditationMode: Identifiable {
         MeditationMode(
             name: "Anxiety Release",
             tagline: "Down-shift a racing mind, fast",
+            settleText: "You are safe. Loosen your grip\nand let the next breath come to you.",
             icon: "wind",
             colors: [.mint, .teal],
             carrierHz: 210,
@@ -132,6 +139,7 @@ struct MeditationMode: Identifiable {
         MeditationMode(
             name: "Healing Tone",
             tagline: "The classic 528 Hz solfeggio",
+            settleText: "Rest a hand on your heart\nand feel it rise and fall.",
             icon: "heart.fill",
             colors: [.pink, .orange],
             carrierHz: 528,

@@ -19,6 +19,8 @@ struct SessionView: View {
     @State private var remainingSeconds = 0
     @State private var countdown = 5
     @State private var volume = 0.6
+    @State private var ambientChoice: AmbientSound = .off
+    @State private var ambientLevel = 0.5
 
     private let durations = [5, 10, 15, 20, 30]
     private let clock = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
@@ -208,19 +210,13 @@ struct SessionView: View {
                 .font(.system(size: 110, weight: .thin, design: .rounded))
                 .foregroundStyle(.white)
                 .monospacedDigit()
-                .id(countdown)
-                .transition(
-                    .asymmetric(
-                        insertion: .scale(scale: 1.35).combined(with: .opacity),
-                        removal: .opacity
-                    )
-                )
+                .contentTransition(.numericText(countsDown: true))
 
             VStack(spacing: 8) {
                 Text(mode.breathing.name)
                     .font(.headline)
                     .foregroundStyle(.white)
-                Text("Sit tall, soften your shoulders,\nand let your eyes rest.")
+                Text(mode.settleText)
                     .font(.subheadline)
                     .foregroundStyle(.white.opacity(0.6))
                     .multilineTextAlignment(.center)
@@ -296,11 +292,12 @@ struct SessionView: View {
     }
 
     private var controls: some View {
-        VStack(spacing: 18) {
+        VStack(spacing: 16) {
             HStack(spacing: 14) {
-                Image(systemName: "speaker.fill")
+                Image(systemName: "waveform")
                     .font(.footnote)
                     .foregroundStyle(.white.opacity(0.5))
+                    .frame(width: 22)
                 Slider(value: $volume, in: 0.05...1)
                     .tint(mode.colors[0])
                     .onChange(of: volume) { _, newValue in
@@ -309,6 +306,26 @@ struct SessionView: View {
                 Image(systemName: "speaker.wave.3.fill")
                     .font(.footnote)
                     .foregroundStyle(.white.opacity(0.5))
+            }
+
+            ambiencePicker
+
+            if ambientChoice != .off {
+                HStack(spacing: 14) {
+                    Image(systemName: ambientChoice.icon)
+                        .font(.footnote)
+                        .foregroundStyle(.white.opacity(0.5))
+                        .frame(width: 22)
+                    Slider(value: $ambientLevel, in: 0.05...1)
+                        .tint(mode.colors[0].opacity(0.7))
+                        .onChange(of: ambientLevel) { _, newValue in
+                            engine.ambientVolume = newValue
+                        }
+                    Image(systemName: "speaker.wave.2.fill")
+                        .font(.footnote)
+                        .foregroundStyle(.white.opacity(0.5))
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
 
             HStack(spacing: 16) {
@@ -336,6 +353,35 @@ struct SessionView: View {
         }
         .padding(18)
         .glassCard(cornerRadius: 28)
+        .animation(.easeInOut(duration: 0.3), value: ambientChoice)
+    }
+
+    /// Ambient bed selector — synthesized live, so switching is seamless.
+    private var ambiencePicker: some View {
+        HStack(spacing: 8) {
+            ForEach(AmbientSound.allCases) { sound in
+                Button {
+                    ambientChoice = sound
+                    engine.ambient = sound
+                } label: {
+                    VStack(spacing: 4) {
+                        Image(systemName: sound.icon)
+                            .font(.subheadline)
+                        Text(sound.rawValue)
+                            .font(.caption2.weight(.semibold))
+                    }
+                    .foregroundStyle(.white.opacity(ambientChoice == sound ? 1 : 0.6))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                    .background(
+                        ambientChoice == sound
+                            ? AnyShapeStyle(mode.colors[0].opacity(0.55))
+                            : AnyShapeStyle(.white.opacity(0.07)),
+                        in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    )
+                }
+            }
+        }
     }
 
     // MARK: - Finished
@@ -376,6 +422,8 @@ struct SessionView: View {
     private func startSession() {
         remainingSeconds = durationMinutes * 60
         engine.volume = volume
+        engine.ambient = ambientChoice
+        engine.ambientVolume = ambientLevel
         engine.start(mode: mode)
         UIApplication.shared.isIdleTimerDisabled = true
         withAnimation(.easeInOut(duration: 0.6)) {
