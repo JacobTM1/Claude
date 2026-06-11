@@ -2,17 +2,19 @@ import AVFoundation
 import Combine
 import MediaPlayer
 
-/// An optional ambient bed mixed under the meditation tone. All three are
+/// An optional ambient bed mixed under the meditation tone. All four are
 /// synthesized in real time — no audio files. The DSP mirrors a validated
 /// offline reference: rain is a pink-noise patter bed plus stochastic
 /// droplet ticks, ocean is irregular swells crossfading deep rumble with a
 /// bright foaming wash, wind is a gusting random walk driving both loudness
-/// and a resonant whoosh.
+/// and a resonant whoosh, fire is a flickering rumble with sparse snappy
+/// crackles and occasional pops.
 enum AmbientSound: String, CaseIterable, Identifiable {
     case off = "Off"
     case rain = "Rain"
     case ocean = "Ocean"
     case wind = "Wind"
+    case fire = "Fire"
 
     var id: String { rawValue }
 
@@ -22,6 +24,7 @@ enum AmbientSound: String, CaseIterable, Identifiable {
         case .rain: "cloud.rain.fill"
         case .ocean: "water.waves"
         case .wind: "wind"
+        case .fire: "flame.fill"
         }
     }
 }
@@ -105,6 +108,14 @@ final class ToneEngine: ObservableObject {
     private var svBand = [0.0, 0.0]
     private var windWalk = [0.0, 0.0]
     private var windWalkTarget = [0.0, 0.0]
+    // fire
+    private var fireRumLP = [0.0, 0.0]
+    private var fireWalk = [0.0, 0.0]
+    private var fireWalkTarget = [0.0, 0.0]
+    private var crackEnv = [0.0, 0.0]
+    private var crackDecay = [0.0, 0.0]
+    private var crackK = [0.6, 0.6]
+    private var crackLP = [0.0, 0.0]
 
     init() {
         registerRemoteCommands()
@@ -253,6 +264,8 @@ final class ToneEngine: ObservableObject {
         oceanWalk = [0, 0]; oceanWalkTarget = [0, 0]
         windRumLP = [0, 0]; svLow = [0, 0]; svBand = [0, 0]
         windWalk = [0, 0]; windWalkTarget = [0, 0]
+        fireRumLP = [0, 0]; fireWalk = [0, 0]; fireWalkTarget = [0, 0]
+        crackEnv = [0, 0]; crackDecay = [0, 0]; crackK = [0.6, 0.6]; crackLP = [0, 0]
     }
 
     // MARK: - Ambient synthesis (render thread)
@@ -269,6 +282,7 @@ final class ToneEngine: ObservableObject {
         case .rain: 1
         case .ocean: 2
         case .wind: 3
+        case .fire: 4
         }
     }
 
@@ -374,11 +388,40 @@ final class ToneEngine: ObservableObject {
         return (windRumLP[ch] * 0.55 + svBand[ch]) * g * 1.5
     }
 
+    private func fireSample(_ ch: Int) -> Double {
+        // flame flicker: a faster random walk than wind's gusts
+        walk(&fireWalk[ch], &fireWalkTarget[ch], ch: ch, rateHz: 2.0, smoothSeconds: 0.25)
+        let flick = 0.65 + 0.35 * (0.5 + 0.5 * fireWalk[ch])
+
+        // fire body: deep flickering rumble
+        brown[ch] = (brown[ch] + 0.024 * white(ch)) * 0.997
+        fireRumLP[ch] += 0.020 * (brown[ch] * 1.3 - fireRumLP[ch])
+
+        // soft flame hiss
+        let hiss = pink(ch) * 0.10
+
+        // crackles: ~12/s, very snappy (0.8–3.8 ms), amplitude heavily
+        // skewed so most are tiny ticks and the occasional one really pops
+        if u01(ch) < 12.0 / sampleRate {
+            let a = u01(ch)
+            crackEnv[ch] = 0.15 + 0.85 * a * a * a
+            let tau = 0.0008 + 0.003 * u01(ch)
+            crackDecay[ch] = exp(-1.0 / (sampleRate * tau))
+            crackK[ch] = 0.5 + 0.45 * u01(ch)
+        }
+        crackEnv[ch] *= crackDecay[ch]
+        crackLP[ch] += crackK[ch] * (white(ch) - crackLP[ch])
+        let crack = crackLP[ch] * crackEnv[ch] * 1.9
+
+        return (fireRumLP[ch] * 0.55 * flick + hiss * flick + crack) * 1.1
+    }
+
     private func ambientSample(channel ch: Int) -> Double {
         let raw: Double = switch ambientKind {
         case 1: rainSample(ch)
         case 2: oceanSample(ch)
         case 3: windSample(ch)
+        case 4: fireSample(ch)
         default: 0
         }
         // soft limiter: transparent at normal levels, rounds the loudest

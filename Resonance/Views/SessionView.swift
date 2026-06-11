@@ -24,6 +24,7 @@ struct SessionView: View {
     @State private var volume = 0.6
     @State private var ambientChoice: AmbientSound = .off
     @State private var ambientLevel = 0.5
+    @State private var controlsHidden = false
 
     /// The end-of-session fade begins this many seconds before zero, so the
     /// sound reaches silence right as the timer does.
@@ -275,11 +276,42 @@ struct SessionView: View {
 
             timerPill
 
-            controls
-                .padding(.top, 18)
-                .padding(.bottom, 28)
+            if controlsHidden {
+                // Minimized: just a quiet handle to invite the swipe back up.
+                Button {
+                    withAnimation(.spring(duration: 0.45)) { controlsHidden = false }
+                } label: {
+                    Image(systemName: "chevron.up")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.5))
+                        .padding(.horizontal, 28)
+                        .padding(.vertical, 9)
+                        .background(.white.opacity(0.07), in: Capsule())
+                }
+                .padding(.top, 16)
+                .padding(.bottom, 30)
+                .transition(.opacity)
+            } else {
+                controls
+                    .padding(.top, 18)
+                    .padding(.bottom, 28)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
         }
         .padding(.horizontal, 20)
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 35)
+                .onEnded { value in
+                    // Respond only to clearly vertical swipes so the volume
+                    // sliders keep their horizontal drags.
+                    let dy = value.translation.height
+                    guard abs(dy) > abs(value.translation.width) * 1.2 else { return }
+                    withAnimation(.spring(duration: 0.45)) {
+                        controlsHidden = dy > 0
+                    }
+                }
+        )
     }
 
     /// Remaining time as a soft glass pill with a slim progress ring —
