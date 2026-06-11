@@ -3,9 +3,11 @@ import Combine
 import MediaPlayer
 
 /// An optional ambient bed mixed under the meditation tone. All three are
-/// synthesized in real time as shaped noise — no audio files:
-/// rain is low-passed white noise, ocean is brown noise with a slow swell,
-/// wind is brown-ish noise whose brightness drifts.
+/// synthesized in real time — no audio files. The DSP mirrors a validated
+/// offline reference: rain is a pink-noise patter bed plus stochastic
+/// droplet ticks, ocean is irregular swells crossfading deep rumble with a
+/// bright foaming wash, wind is a gusting random walk driving both loudness
+/// and a resonant whoosh.
 enum AmbientSound: String, CaseIterable, Identifiable {
     case off = "Off"
     case rain = "Rain"
@@ -24,31 +26,30 @@ enum AmbientSound: String, CaseIterable, Identifiable {
     }
 }
 
-/// Generates meditation tones in real time with `AVAudioEngine` — no audio
-/// files. For binaural modes the left ear gets the carrier frequency and the
-/// right ear gets carrier + beat; the brain perceives the difference as a
-/// slow pulse. All level changes are ramped over ~2 seconds so the tone
-/// always fades in and out gently.
+/// Generates meditation tones in real time with `AVAudioEngine`. For
+/// binaural modes the left ear gets the carrier frequency and the right ear
+/// gets carrier + beat; the brain perceives the difference as a slow pulse.
 ///
-/// Audio continues when the app is backgrounded or the screen is locked
-/// (the target declares the `audio` background mode), and the session is
-/// published to the lock screen with working play/pause controls.
+/// Every level change is a timed linear ramp (so a fade asked to take six
+/// seconds takes six seconds regardless of the starting level), and the
+/// ambient output passes through a tanh soft limiter so the loudest rain
+/// tick rounds off gently instead of clipping.
 final class ToneEngine: ObservableObject {
     @Published private(set) var isPlaying = false
 
     var volume: Double = 0.6 {
-        didSet { refreshTargets() }
+        didSet { retarget(seconds: 0.3) }
     }
 
     var ambient: AmbientSound = .off {
         didSet {
             ambientKind = Self.kindIndex(of: ambient)
-            refreshTargets()
+            retarget(seconds: 1.2)
         }
     }
 
     var ambientVolume: Double = 0.5 {
-        didSet { refreshTargets() }
+        didSet { retarget(seconds: 0.3) }
     }
 
     /// Pure sine tones sound far louder than music at the same level.
@@ -59,25 +60,51 @@ final class ToneEngine: ObservableObject {
     private var sourceNode: AVAudioSourceNode?
     private let sampleRate: Double = 44_100
     private var remoteCommandTargets: [(MPRemoteCommand, Any)] = []
+    private var fadingOut = false
 
     // State below is read by the audio render thread. Frequencies are only
-    // written before the engine starts; amplitudes move via per-sample ramps.
+    // written before the engine starts; amplitudes move via timed ramps.
     private var leftHz: Double = 200
     private var rightHz: Double = 206
     private var leftPhase: Double = 0
     private var rightPhase: Double = 0
-    private var amplitude: Double = 0
-    private var targetAmplitude: Double = 0
+    private var amplitude = 0.0
+    private var targetAmplitude = 0.0
+    private var toneRamp = 1e-5
+    private var ambientAmp = 0.0
+    private var ambientTarget = 0.0
+    private var ambientRamp = 1e-5
 
     // Ambient synthesis state (one generator per channel for stereo width).
     private var ambientKind = 0 // 0 off · 1 rain · 2 ocean · 3 wind
-    private var ambientAmp = 0.0
-    private var ambientTarget = 0.0
     private var clock = 0.0
     private var noiseSeed: [UInt32] = [0x1234_5678, 0x9ABC_DEF1]
-    private var rainLP = [0.0, 0.0]
+    // pink noise (Paul Kellet economy filter)
+    private var pinkB0 = [0.0, 0.0]
+    private var pinkB1 = [0.0, 0.0]
+    private var pinkB2 = [0.0, 0.0]
+    // rain
+    private var rainHP = [0.0, 0.0]
+    private var rainBedLP = [0.0, 0.0]
+    private var dropEnv = [0.0, 0.0]
+    private var dropDecay = [0.0, 0.0]
+    private var dropK = [0.3, 0.3]
+    private var dropLP = [0.0, 0.0]
+    private var rainWalk = [0.0, 0.0]
+    private var rainWalkTarget = [0.0, 0.0]
+    // ocean
     private var brown = [0.0, 0.0]
-    private var windLP = [0.0, 0.0]
+    private var deepLP = [0.0, 0.0]
+    private var oceanHP = [0.0, 0.0]
+    private var washLP = [0.0, 0.0]
+    private var oceanWalk = [0.0, 0.0]
+    private var oceanWalkTarget = [0.0, 0.0]
+    // wind
+    private var windRumLP = [0.0, 0.0]
+    private var svLow = [0.0, 0.0]
+    private var svBand = [0.0, 0.0]
+    private var windWalk = [0.0, 0.0]
+    private var windWalkTarget = [0.0, 0.0]
 
     init() {
         registerRemoteCommands()
@@ -93,9 +120,8 @@ final class ToneEngine: ObservableObject {
         amplitude = 0
         ambientAmp = 0
         clock = 0
-        rainLP = [0, 0]
-        brown = [0, 0]
-        windLP = [0, 0]
+        fadingOut = false
+        resetAmbientState()
 
         let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 2)!
         let node = AVAudioSourceNode { [weak self] _, _, frameCount, audioBufferList -> OSStatus in
@@ -104,12 +130,10 @@ final class ToneEngine: ObservableObject {
             let twoPi = 2.0 * Double.pi
             let leftStep = twoPi * self.leftHz / self.sampleRate
             let rightStep = twoPi * self.rightHz / self.sampleRate
-            let ramp = 1.0 / (self.sampleRate * 2.0)        // ~2 s tone fade
-            let ambientRamp = 1.0 / (self.sampleRate * 1.2) // ~1.2 s bed fade
 
             for frame in 0..<Int(frameCount) {
-                self.amplitude = Self.step(self.amplitude, toward: self.targetAmplitude, by: ramp)
-                self.ambientAmp = Self.step(self.ambientAmp, toward: self.ambientTarget, by: ambientRamp)
+                self.amplitude = Self.step(self.amplitude, toward: self.targetAmplitude, by: self.toneRamp)
+                self.ambientAmp = Self.step(self.ambientAmp, toward: self.ambientTarget, by: self.ambientRamp)
                 self.clock += 1.0 / self.sampleRate
 
                 var left = sin(self.leftPhase) * self.amplitude
@@ -142,7 +166,7 @@ final class ToneEngine: ObservableObject {
             try AVAudioSession.sharedInstance().setActive(true)
             try engine.start()
             isPlaying = true
-            refreshTargets()
+            retarget(seconds: 3.0) // luxurious fade-in to open the session
             publishNowPlaying(mode: mode)
         } catch {
             print("ToneEngine failed to start: \(error)")
@@ -151,30 +175,60 @@ final class ToneEngine: ObservableObject {
 
     func setPaused(_ paused: Bool) {
         guard sourceNode != nil else { return }
+        fadingOut = false
         isPlaying = !paused
-        refreshTargets()
+        retarget(seconds: 1.5)
         updateNowPlayingRate()
     }
 
-    /// Fades everything out, then releases the audio engine.
+    /// Fades out over ~1 s, then releases the audio engine.
     func stop() {
         guard sourceNode != nil else { return }
+        fadingOut = false
         isPlaying = false
-        refreshTargets()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.2) { [weak self] in
+        retarget(seconds: 1.0)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) { [weak self] in
             guard let self, !self.isPlaying else { return }
             self.teardown()
         }
     }
 
-    private func refreshTargets() {
-        guard sourceNode != nil, isPlaying else {
-            targetAmplitude = 0
-            ambientTarget = 0
-            return
+    /// Long musical fade for a session's natural ending: the sound drifts
+    /// down to silence over `seconds`, then the engine is released.
+    func fadeOutAndStop(over seconds: Double) {
+        guard sourceNode != nil else { return }
+        fadingOut = true
+        setTargets(tone: 0, ambient: 0, seconds: seconds)
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds + 0.4) { [weak self] in
+            guard let self, self.fadingOut else { return }
+            self.fadingOut = false
+            self.isPlaying = false
+            self.teardown()
         }
-        targetAmplitude = volume * Self.headroom
-        ambientTarget = ambient == .off ? 0 : ambientVolume * Self.ambientHeadroom
+    }
+
+    /// Restores normal levels if the user extends the session mid-fade.
+    func cancelFadeOut() {
+        guard fadingOut else { return }
+        fadingOut = false
+        retarget(seconds: 1.0)
+    }
+
+    private func retarget(seconds: Double) {
+        guard sourceNode != nil, !fadingOut else { return }
+        let tone = isPlaying ? volume * Self.headroom : 0
+        let bed = (isPlaying && ambient != .off) ? ambientVolume * Self.ambientHeadroom : 0
+        setTargets(tone: tone, ambient: bed, seconds: seconds)
+    }
+
+    /// Timed ramps: the step size is derived from the distance to travel,
+    /// so the transition takes `seconds` regardless of the current level.
+    private func setTargets(tone: Double, ambient bed: Double, seconds: Double) {
+        let span = sampleRate * max(seconds, 0.05)
+        toneRamp = max(abs(tone - amplitude) / span, 1e-9)
+        ambientRamp = max(abs(bed - ambientAmp) / span, 1e-9)
+        targetAmplitude = tone
+        ambientTarget = bed
     }
 
     private func teardown() {
@@ -188,6 +242,17 @@ final class ToneEngine: ObservableObject {
         targetAmplitude = 0
         ambientAmp = 0
         ambientTarget = 0
+    }
+
+    private func resetAmbientState() {
+        pinkB0 = [0, 0]; pinkB1 = [0, 0]; pinkB2 = [0, 0]
+        rainHP = [0, 0]; rainBedLP = [0, 0]
+        dropEnv = [0, 0]; dropDecay = [0, 0]; dropK = [0.3, 0.3]; dropLP = [0, 0]
+        rainWalk = [0, 0]; rainWalkTarget = [0, 0]
+        brown = [0, 0]; deepLP = [0, 0]; oceanHP = [0, 0]; washLP = [0, 0]
+        oceanWalk = [0, 0]; oceanWalkTarget = [0, 0]
+        windRumLP = [0, 0]; svLow = [0, 0]; svBand = [0, 0]
+        windWalk = [0, 0]; windWalkTarget = [0, 0]
     }
 
     // MARK: - Ambient synthesis (render thread)
@@ -216,31 +281,109 @@ final class ToneEngine: ObservableObject {
         return Double(s) / Double(UInt32.max) * 2.0 - 1.0
     }
 
-    private func ambientSample(channel ch: Int) -> Double {
-        switch ambientKind {
-        case 1: // Rain: low-passed white noise — a steady soft hiss.
-            let w = white(ch)
-            rainLP[ch] += 0.18 * (w - rainLP[ch])
-            return rainLP[ch] * 2.4
+    private func u01(_ ch: Int) -> Double {
+        (white(ch) + 1.0) * 0.5
+    }
 
-        case 2: // Ocean: brown noise rising and falling in ~12 s swells.
-            let w = white(ch)
-            brown[ch] = (brown[ch] + 0.025 * w) * 0.997
-            let phase = ch == 0 ? 0.0 : 0.35
-            let swellWave = 0.5 + 0.5 * sin(2.0 * .pi * 0.055 * clock + phase)
-            let swell = 0.30 + 0.70 * pow(swellWave, 1.6)
-            return brown[ch] * 7.0 * swell
+    private func pink(_ ch: Int) -> Double {
+        let w = white(ch)
+        pinkB0[ch] = 0.99765 * pinkB0[ch] + w * 0.0990460
+        pinkB1[ch] = 0.96300 * pinkB1[ch] + w * 0.2965164
+        pinkB2[ch] = 0.57000 * pinkB2[ch] + w * 1.0526913
+        return (pinkB0[ch] + pinkB1[ch] + pinkB2[ch] + w * 0.1848) * 0.18
+    }
 
-        case 3: // Wind: brown-ish noise whose brightness slowly drifts.
-            let w = white(ch)
-            let phase = ch == 0 ? 0.0 : 1.7
-            let k = 0.018 + 0.014 * (0.5 + 0.5 * sin(2.0 * .pi * 0.045 * clock + phase))
-            windLP[ch] += k * (w - windLP[ch])
-            return windLP[ch] * 7.5
-
-        default:
-            return 0
+    /// Smoothed random-walk LFO in [-1, 1] — nature never repeats exactly.
+    private func walk(
+        _ value: inout Double, _ target: inout Double,
+        ch: Int, rateHz: Double, smoothSeconds: Double
+    ) {
+        if u01(ch) < rateHz / sampleRate {
+            target = white(ch)
         }
+        value += (target - value) / (sampleRate * smoothSeconds)
+    }
+
+    private func rainSample(_ ch: Int) -> Double {
+        // patter bed: pink noise band-limited to ~200 Hz – 5 kHz
+        let p = pink(ch)
+        rainHP[ch] += 0.028 * (p - rainHP[ch])
+        let bedHP = p - rainHP[ch]
+        rainBedLP[ch] += 0.51 * (bedHP - rainBedLP[ch])
+        let bed = rainBedLP[ch]
+
+        // droplet ticks: ~45/s per ear, each a 2–8 ms enveloped burst with
+        // random brightness — small drops bright, big drops duller
+        if u01(ch) < 45.0 / sampleRate {
+            let amp = u01(ch)
+            dropEnv[ch] = 0.25 + 0.75 * amp * amp
+            let tau = 0.002 + 0.006 * u01(ch)
+            dropDecay[ch] = exp(-1.0 / (sampleRate * tau))
+            dropK[ch] = 0.18 + 0.5 * u01(ch)
+        }
+        dropEnv[ch] *= dropDecay[ch]
+        dropLP[ch] += dropK[ch] * (white(ch) - dropLP[ch])
+        let drop = dropLP[ch] * dropEnv[ch] * 1.4
+
+        // the whole shower gently waxes and wanes
+        walk(&rainWalk[ch], &rainWalkTarget[ch], ch: ch, rateHz: 1.0 / 1.5, smoothSeconds: 0.7)
+        return (bed * 0.9 + drop) * (1.0 + 0.25 * rainWalk[ch]) * 0.75
+    }
+
+    private func oceanSample(_ ch: Int) -> Double {
+        // irregular swell: two incommensurate slow sines + a random drift,
+        // so no two waves are ever identical
+        walk(&oceanWalk[ch], &oceanWalkTarget[ch], ch: ch, rateHz: 0.25, smoothSeconds: 2.0)
+        let phase = ch == 0 ? 0.0 : 0.35
+        let m = 0.45 * sin(2.0 * .pi * 0.043 * clock + phase)
+            + 0.35 * sin(2.0 * .pi * 0.071 * clock + 1.7 + phase)
+            + 0.35 * oceanWalk[ch]
+        let env = min(max((m + 1.0) * 0.5, 0.0), 1.0)
+        let crash = pow(env, 2.4)
+
+        // deep layer: the rumbling body of the sea
+        brown[ch] = (brown[ch] + 0.024 * white(ch)) * 0.997
+        deepLP[ch] += 0.055 * (brown[ch] * 1.4 - deepLP[ch])
+
+        // bright layer: the foaming wash that swells with each crash
+        let p = pink(ch)
+        oceanHP[ch] += 0.069 * (p - oceanHP[ch])
+        washLP[ch] += 0.434 * ((p - oceanHP[ch]) - washLP[ch])
+
+        let level = 0.30 + 0.70 * crash
+        return level * (deepLP[ch] * 0.95 + washLP[ch] * (0.25 + 1.7 * crash)) * 1.15
+    }
+
+    private func windSample(_ ch: Int) -> Double {
+        walk(&windWalk[ch], &windWalkTarget[ch], ch: ch, rateHz: 1.0 / 3.0, smoothSeconds: 1.2)
+        let gust = min(max(0.5 + 0.5 * windWalk[ch], 0.0), 1.0)
+        let g = 0.15 + 0.85 * pow(gust, 1.5)
+
+        // rumble bed
+        brown[ch] = (brown[ch] + 0.024 * white(ch)) * 0.997
+        windRumLP[ch] += 0.035 * (brown[ch] * 1.5 - windRumLP[ch])
+
+        // whoosh: resonant bandpass whose center rises with the gust
+        let fc = 240.0 + 650.0 * gust
+        let f1 = 2.0 * sin(.pi * fc / sampleRate)
+        let w = white(ch)
+        svLow[ch] += f1 * svBand[ch]
+        let svHigh = w - svLow[ch] - 0.7 * svBand[ch]
+        svBand[ch] += f1 * svHigh
+
+        return (windRumLP[ch] * 0.55 + svBand[ch]) * g * 1.5
+    }
+
+    private func ambientSample(channel ch: Int) -> Double {
+        let raw: Double = switch ambientKind {
+        case 1: rainSample(ch)
+        case 2: oceanSample(ch)
+        case 3: windSample(ch)
+        default: 0
+        }
+        // soft limiter: transparent at normal levels, rounds the loudest
+        // droplet tick instead of clipping it
+        return tanh(raw)
     }
 
     // MARK: - Lock screen integration

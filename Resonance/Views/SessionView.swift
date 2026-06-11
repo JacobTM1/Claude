@@ -18,9 +18,16 @@ struct SessionView: View {
     @State private var durationMinutes = 10
     @State private var remainingSeconds = 0
     @State private var countdown = 5
+    @State private var totalSeconds = 600
+    @State private var endFadeStarted = false
+    @State private var showExtend = false
     @State private var volume = 0.6
     @State private var ambientChoice: AmbientSound = .off
     @State private var ambientLevel = 0.5
+
+    /// The end-of-session fade begins this many seconds before zero, so the
+    /// sound reaches silence right as the timer does.
+    private let endFadeSeconds = 6
 
     private let durations = [5, 10, 15, 20, 30]
     private let clock = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
@@ -58,6 +65,13 @@ struct SessionView: View {
                 }
             case .running:
                 remainingSeconds -= 1
+                if remainingSeconds <= endFadeSeconds && !endFadeStarted && remainingSeconds > 0 {
+                    endFadeStarted = true
+                    engine.fadeOutAndStop(over: Double(endFadeSeconds) + 0.5)
+                }
+                withAnimation(.easeInOut(duration: 0.6)) {
+                    showExtend = remainingSeconds > 0 && remainingSeconds <= 12
+                }
                 if remainingSeconds <= 0 {
                     finishSession()
                 }
@@ -66,8 +80,10 @@ struct SessionView: View {
             }
         }
         .onChange(of: engine.isPlaying) { _, playing in
-            // Keep the UI in sync when playback is toggled from the lock screen.
-            if state == .running && !playing {
+            // Keep the UI in sync when playback is toggled from the lock
+            // screen — but not when the engine goes quiet because the
+            // session's own ending fade has completed.
+            if state == .running && !playing && !endFadeStarted {
                 state = .paused
             } else if state == .paused && playing {
                 state = .running
@@ -210,7 +226,8 @@ struct SessionView: View {
                 .font(.system(size: 110, weight: .thin, design: .rounded))
                 .foregroundStyle(.white)
                 .monospacedDigit()
-                .contentTransition(.numericText(countsDown: true))
+                .id(countdown)
+                .transition(.opacity)
 
             VStack(spacing: 8) {
                 Text(mode.breathing.name)
@@ -222,7 +239,7 @@ struct SessionView: View {
                     .multilineTextAlignment(.center)
             }
         }
-        .animation(.easeOut(duration: 0.5), value: countdown)
+        .animation(.easeInOut(duration: 0.85), value: countdown)
         .padding(32)
     }
 
@@ -243,6 +260,19 @@ struct SessionView: View {
 
             Spacer()
 
+            if showExtend {
+                Button(action: extendSession) {
+                    Label("+5 minutes", systemImage: "plus")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 10)
+                        .background(mode.colors[0].opacity(0.55), in: Capsule())
+                }
+                .padding(.bottom, 12)
+                .transition(.opacity.combined(with: .scale(scale: 0.92)))
+            }
+
             timerPill
 
             controls
@@ -255,8 +285,10 @@ struct SessionView: View {
     /// Remaining time as a soft glass pill with a slim progress ring —
     /// quieter and more organic than bare digits.
     private var timerPill: some View {
-        let total = Double(durationMinutes * 60)
-        let progress = total > 0 ? 1.0 - Double(max(remainingSeconds, 0)) / total : 0
+        let total = Double(totalSeconds)
+        let progress = total > 0
+            ? min(max(1.0 - Double(max(remainingSeconds, 0)) / total, 0), 1)
+            : 0
 
         return HStack(spacing: 12) {
             ZStack {
@@ -421,6 +453,9 @@ struct SessionView: View {
 
     private func startSession() {
         remainingSeconds = durationMinutes * 60
+        totalSeconds = remainingSeconds
+        endFadeStarted = false
+        showExtend = false
         engine.volume = volume
         engine.ambient = ambientChoice
         engine.ambientVolume = ambientLevel
@@ -428,6 +463,16 @@ struct SessionView: View {
         UIApplication.shared.isIdleTimerDisabled = true
         withAnimation(.easeInOut(duration: 0.6)) {
             state = .running
+        }
+    }
+
+    private func extendSession() {
+        remainingSeconds += 5 * 60
+        totalSeconds += 5 * 60
+        engine.cancelFadeOut()
+        endFadeStarted = false
+        withAnimation(.easeInOut(duration: 0.6)) {
+            showExtend = false
         }
     }
 
@@ -442,15 +487,23 @@ struct SessionView: View {
     }
 
     private func finishSession() {
-        engine.stop()
+        // On a natural ending the sound has already faded to silence; stop()
+        // covers the pause-and-resume-in-the-final-seconds edge case.
+        if engine.isPlaying {
+            engine.stop()
+        }
         UIApplication.shared.isIdleTimerDisabled = false
-        withAnimation { state = .finished }
+        showExtend = false
+        withAnimation(.easeInOut(duration: 0.8)) { state = .finished }
     }
 
     private func endSession() {
         engine.stop()
         UIApplication.shared.isIdleTimerDisabled = false
-        dismiss()
+        // Give the 1 s fade a moment so the sound drifts off rather than cuts.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+            dismiss()
+        }
     }
 }
 
