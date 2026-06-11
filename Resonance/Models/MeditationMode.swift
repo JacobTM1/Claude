@@ -21,6 +21,8 @@ struct MeditationMode: Identifiable {
     let bandLabel: String
 
     let breathing: BreathingPattern
+    /// How the energy particles move during this mode's session.
+    let particleMotion: ParticleMotion
     let guidance: [String]
     let science: String
 
@@ -44,11 +46,13 @@ struct MeditationMode: Identifiable {
             beatHz: 6,
             bandLabel: "Theta · 6 Hz",
             breathing: .extendedExhale,
+            particleMotion: .rise,
             guidance: [
                 "Put on headphones — binaural beats only work with stereo separation.",
                 "Sit with your spine tall, hands resting on your thighs, eyes closed.",
                 "Follow the circle: in for 4, hold for 2, out for a long 8.",
-                "When thoughts arise, don't fight them — return to the breath and the tone.",
+                "Watch the rising lights: imagine energy drawn up from the base of your spine to the crown of your head.",
+                "When thoughts arise, don't fight them — return to the breath and the rising energy.",
                 "After a few minutes, let the counting dissolve and rest in the rhythm.",
             ],
             science: "Theta waves (4–8 Hz) dominate EEG readings of experienced meditators in deep absorption. A 6 Hz binaural beat invites the brain toward that band; the extended exhale slows the heart to meet it."
@@ -62,6 +66,7 @@ struct MeditationMode: Identifiable {
             beatHz: 40,
             bandLabel: "Gamma · 40 Hz",
             breathing: .box,
+            particleMotion: .orbit,
             guidance: [
                 "Put on headphones and sit upright at your desk or cushion.",
                 "Run a few rounds of box breathing: in 4, hold 4, out 4, hold 4.",
@@ -79,6 +84,7 @@ struct MeditationMode: Identifiable {
             beatHz: 10,
             bandLabel: "Alpha · 10 Hz",
             breathing: .coherent,
+            particleMotion: .drift,
             guidance: [
                 "Headphones on, shoulders down, jaw unclenched.",
                 "Breathe with the circle: 5.5 seconds in, 5.5 seconds out.",
@@ -96,6 +102,7 @@ struct MeditationMode: Identifiable {
             beatHz: 2.5,
             bandLabel: "Delta · 2.5 Hz",
             breathing: .fourSevenEight,
+            particleMotion: .fall,
             guidance: [
                 "Lie down in the dark. Earbuds work better than over-ears here.",
                 "Begin 4-7-8 breathing: in 4, hold 7, out slowly for 8.",
@@ -113,6 +120,7 @@ struct MeditationMode: Identifiable {
             beatHz: 8,
             bandLabel: "Alpha–Theta · 8 Hz",
             breathing: .physiologicalSigh,
+            particleMotion: .drift,
             guidance: [
                 "You can do this anywhere — seated, standing, even walking.",
                 "Inhale through the nose, then sip in a little more air on top.",
@@ -130,6 +138,7 @@ struct MeditationMode: Identifiable {
             beatHz: 0,
             bandLabel: "Solfeggio · 528 Hz",
             breathing: .oceanBreath,
+            particleMotion: .rise,
             guidance: [
                 "No headphones needed — a pure tone works on speakers too.",
                 "Rest a hand on your chest and feel it rise and fall.",

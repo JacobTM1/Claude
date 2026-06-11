@@ -1,11 +1,16 @@
 import AVFoundation
 import Combine
+import MediaPlayer
 
 /// Generates meditation tones in real time with `AVAudioEngine` — no audio
 /// files. For binaural modes the left ear gets the carrier frequency and the
 /// right ear gets carrier + beat; the brain perceives the difference as a
 /// slow pulse. All level changes are ramped over ~2 seconds so the tone
 /// always fades in and out gently.
+///
+/// Audio continues when the app is backgrounded or the screen is locked
+/// (the target declares the `audio` background mode), and the session is
+/// published to the lock screen with working play/pause controls.
 final class ToneEngine: ObservableObject {
     @Published private(set) var isPlaying = false
 
@@ -21,6 +26,7 @@ final class ToneEngine: ObservableObject {
     private let engine = AVAudioEngine()
     private var sourceNode: AVAudioSourceNode?
     private let sampleRate: Double = 44_100
+    private var remoteCommandTargets: [(MPRemoteCommand, Any)] = []
 
     // State below is read by the audio render thread. Frequencies are only
     // written before the engine starts; amplitude moves via the ramp.
@@ -30,6 +36,10 @@ final class ToneEngine: ObservableObject {
     private var rightPhase: Double = 0
     private var amplitude: Double = 0
     private var targetAmplitude: Double = 0
+
+    init() {
+        registerRemoteCommands()
+    }
 
     func start(mode: MeditationMode) {
         teardown()
@@ -81,6 +91,7 @@ final class ToneEngine: ObservableObject {
             try AVAudioSession.sharedInstance().setActive(true)
             try engine.start()
             isPlaying = true
+            publishNowPlaying(mode: mode)
         } catch {
             print("ToneEngine failed to start: \(error)")
         }
@@ -90,6 +101,7 @@ final class ToneEngine: ObservableObject {
         guard sourceNode != nil else { return }
         targetAmplitude = paused ? 0 : volume * Self.headroom
         isPlaying = !paused
+        updateNowPlayingRate()
     }
 
     /// Fades the tone out, then releases the audio engine.
@@ -108,12 +120,50 @@ final class ToneEngine: ObservableObject {
             engine.stop()
             engine.detach(node)
             sourceNode = nil
+            MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
         }
         amplitude = 0
         targetAmplitude = 0
     }
 
+    // MARK: - Lock screen integration
+
+    private func publishNowPlaying(mode: MeditationMode) {
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = [
+            MPMediaItemPropertyTitle: mode.name,
+            MPMediaItemPropertyArtist: "Resonance · \(mode.bandLabel)",
+            MPNowPlayingInfoPropertyIsLiveStream: true,
+            MPNowPlayingInfoPropertyPlaybackRate: 1.0,
+        ]
+    }
+
+    private func updateNowPlayingRate() {
+        var info = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
+        info[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? 1.0 : 0.0
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+    }
+
+    private func registerRemoteCommands() {
+        let center = MPRemoteCommandCenter.shared()
+        let bindings: [(MPRemoteCommand, (ToneEngine) -> Void)] = [
+            (center.playCommand, { $0.setPaused(false) }),
+            (center.pauseCommand, { $0.setPaused(true) }),
+            (center.togglePlayPauseCommand, { $0.setPaused($0.isPlaying) }),
+        ]
+        for (command, action) in bindings {
+            let target = command.addTarget { [weak self] _ in
+                guard let self, self.sourceNode != nil else { return .commandFailed }
+                action(self)
+                return .success
+            }
+            remoteCommandTargets.append((command, target))
+        }
+    }
+
     deinit {
+        for (command, target) in remoteCommandTargets {
+            command.removeTarget(target)
+        }
         engine.stop()
     }
 }

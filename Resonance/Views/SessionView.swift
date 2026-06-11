@@ -1,10 +1,12 @@
 import SwiftUI
+import UIKit
 
 struct SessionView: View {
     let mode: MeditationMode
 
     private enum SessionState {
         case intro
+        case countdown
         case running
         case paused
         case finished
@@ -15,6 +17,7 @@ struct SessionView: View {
     @State private var state: SessionState = .intro
     @State private var durationMinutes = 10
     @State private var remainingSeconds = 0
+    @State private var countdown = 5
     @State private var volume = 0.6
 
     private let durations = [5, 10, 15, 20, 30]
@@ -22,11 +25,18 @@ struct SessionView: View {
 
     var body: some View {
         ZStack {
-            Theme.sessionBackground(for: mode).ignoresSafeArea()
+            AuroraBackground(colors: mode.colors, intensity: state == .intro ? 0.7 : 1.0)
+
+            if state != .intro {
+                ParticleFieldView(motion: mode.particleMotion, tint: mode.colors[0])
+                    .transition(.opacity)
+            }
 
             switch state {
             case .intro:
                 intro
+            case .countdown:
+                countdownView
             case .running, .paused:
                 session
             case .finished:
@@ -37,15 +47,33 @@ struct SessionView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.hidden, for: .navigationBar)
         .onReceive(clock) { _ in
-            guard state == .running else { return }
-            remainingSeconds -= 1
-            if remainingSeconds <= 0 {
-                engine.stop()
-                withAnimation { state = .finished }
+            switch state {
+            case .countdown:
+                if countdown > 1 {
+                    countdown -= 1
+                } else {
+                    startSession()
+                }
+            case .running:
+                remainingSeconds -= 1
+                if remainingSeconds <= 0 {
+                    finishSession()
+                }
+            default:
+                break
+            }
+        }
+        .onChange(of: engine.isPlaying) { _, playing in
+            // Keep the UI in sync when playback is toggled from the lock screen.
+            if state == .running && !playing {
+                state = .paused
+            } else if state == .paused && playing {
+                state = .running
             }
         }
         .onDisappear {
             engine.stop()
+            UIApplication.shared.isIdleTimerDisabled = false
         }
     }
 
@@ -150,7 +178,12 @@ struct SessionView: View {
     }
 
     private var beginButton: some View {
-        Button(action: begin) {
+        Button {
+            countdown = 5
+            withAnimation(.easeInOut(duration: 0.5)) {
+                state = .countdown
+            }
+        } label: {
             Label("Begin Session", systemImage: "play.fill")
                 .font(.headline)
                 .foregroundStyle(.white)
@@ -161,6 +194,40 @@ struct SessionView: View {
                     in: Capsule()
                 )
         }
+    }
+
+    // MARK: - Countdown
+
+    private var countdownView: some View {
+        VStack(spacing: 26) {
+            Text("Settle in")
+                .font(.title3.weight(.medium))
+                .foregroundStyle(.white.opacity(0.8))
+
+            Text("\(countdown)")
+                .font(.system(size: 110, weight: .thin, design: .rounded))
+                .foregroundStyle(.white)
+                .monospacedDigit()
+                .id(countdown)
+                .transition(
+                    .asymmetric(
+                        insertion: .scale(scale: 1.35).combined(with: .opacity),
+                        removal: .opacity
+                    )
+                )
+
+            VStack(spacing: 8) {
+                Text(mode.breathing.name)
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                Text("Sit tall, soften your shoulders,\nand let your eyes rest.")
+                    .font(.subheadline)
+                    .foregroundStyle(.white.opacity(0.6))
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .animation(.easeOut(duration: 0.5), value: countdown)
+        .padding(32)
     }
 
     // MARK: - Running
@@ -181,12 +248,12 @@ struct SessionView: View {
             Spacer()
 
             Text(formatTime(max(remainingSeconds, 0)))
-                .font(.system(size: 44, weight: .light, design: .rounded))
-                .foregroundStyle(.white)
+                .font(.system(size: 40, weight: .light, design: .rounded))
+                .foregroundStyle(.white.opacity(0.9))
                 .monospacedDigit()
 
             controls
-                .padding(.top, 20)
+                .padding(.top, 18)
                 .padding(.bottom, 28)
         }
         .padding(.horizontal, 20)
@@ -270,11 +337,12 @@ struct SessionView: View {
 
     // MARK: - Actions
 
-    private func begin() {
+    private func startSession() {
         remainingSeconds = durationMinutes * 60
         engine.volume = volume
         engine.start(mode: mode)
-        withAnimation(.easeInOut(duration: 0.5)) {
+        UIApplication.shared.isIdleTimerDisabled = true
+        withAnimation(.easeInOut(duration: 0.6)) {
             state = .running
         }
     }
@@ -289,8 +357,15 @@ struct SessionView: View {
         }
     }
 
+    private func finishSession() {
+        engine.stop()
+        UIApplication.shared.isIdleTimerDisabled = false
+        withAnimation { state = .finished }
+    }
+
     private func endSession() {
         engine.stop()
+        UIApplication.shared.isIdleTimerDisabled = false
         dismiss()
     }
 }

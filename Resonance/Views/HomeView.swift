@@ -11,7 +11,7 @@ struct HomeView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                Theme.background.ignoresSafeArea()
+                AuroraBackground(colors: [.indigo, .purple], intensity: 0.8)
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 24) {
