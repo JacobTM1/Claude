@@ -1,73 +1,5 @@
-import CoreHaptics
 import SwiftUI
 import UIKit
-
-/// A continuous haptic that breathes with the flower: it swells as the
-/// petals open and softens as they fold, so the body feels the rhythm the
-/// eyes see — plus a gentle tap at each phase boundary.
-final class BreathHaptics {
-    private var engine: CHHapticEngine?
-    private var player: CHHapticAdvancedPatternPlayer?
-    private var lastIntensity: Double = -1
-    private var lastSendTime: TimeInterval = 0
-    private(set) var isRunning = false
-
-    func start() {
-        guard !isRunning,
-              CHHapticEngine.capabilitiesForHardware().supportsHaptics else { return }
-        do {
-            let engine = try CHHapticEngine()
-            engine.resetHandler = { [weak self] in
-                try? self?.engine?.start()
-            }
-            try engine.start()
-
-            let event = CHHapticEvent(
-                eventType: .hapticContinuous,
-                parameters: [
-                    CHHapticEventParameter(parameterID: .hapticIntensity, value: 1.0),
-                    CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.25),
-                ],
-                relativeTime: 0,
-                duration: 86_400 // effectively endless; stopped explicitly
-            )
-            let pattern = try CHHapticPattern(events: [event], parameters: [])
-            let player = try engine.makeAdvancedPlayer(with: pattern)
-            try player.start(atTime: CHHapticTimeImmediate)
-
-            self.engine = engine
-            self.player = player
-            lastIntensity = -1
-            isRunning = true
-        } catch {
-            stop()
-        }
-    }
-
-    /// Throttled dynamic update; intensity 0…1 follows the flower's bloom.
-    func update(intensity: Double, at time: TimeInterval) {
-        guard isRunning, let player else { return }
-        let value = min(max(intensity, 0), 1)
-        guard time - lastSendTime > 0.08,
-              abs(value - lastIntensity) > 0.01 || time - lastSendTime > 0.5 else { return }
-        lastSendTime = time
-        lastIntensity = value
-        let parameter = CHHapticDynamicParameter(
-            parameterID: .hapticIntensityControl,
-            value: Float(value),
-            relativeTime: 0
-        )
-        try? player.sendParameters([parameter], atTime: CHHapticTimeImmediate)
-    }
-
-    func stop() {
-        try? player?.stop(atTime: CHHapticTimeImmediate)
-        engine?.stop()
-        player = nil
-        engine = nil
-        isRunning = false
-    }
-}
 
 /// The breathing guide: a flower of translucent petals that blooms open on
 /// the inhale and folds closed on the exhale, slowly rotating.
@@ -75,8 +7,14 @@ final class BreathHaptics {
 /// The bloom is computed every frame as a pure function of elapsed time —
 /// not animated with timers — so the flower is sample-accurate against the
 /// phase durations: a 7-second exhale takes exactly 7 seconds, with no
-/// accumulating drift across cycles. The haptic intensity is derived from
-/// the same bloom value, so vibration and animation can never disagree.
+/// accumulating drift across cycles.
+///
+/// Haptics are a train of discrete soft pulses in the style of Apple's
+/// Mindfulness app: they quicken and strengthen as the flower blooms, slow
+/// and soften as it folds, and idle to a faint slow pulse during holds.
+/// Rate and intensity are derived from the same time function as the
+/// animation, so touch and motion can never disagree — and because each
+/// pulse is an independent tap, there is nothing to expire mid-session.
 struct BreathingGuideView: View {
     let pattern: BreathingPattern
     let tint: Color
@@ -87,10 +25,11 @@ struct BreathingGuideView: View {
     /// Elapsed time accumulated up to the last pause.
     @State private var frozenElapsed: Double = 0
     @State private var appearDate = Date()
-    @State private var haptics = BreathHaptics()
+    @State private var nextPulseAt: TimeInterval = 0
 
     private let petalCount = 6
-    private let phaseTap = UIImpactFeedbackGenerator(style: .soft)
+    private let pulse = UIImpactFeedbackGenerator(style: .soft)
+    private let phaseTap = UIImpactFeedbackGenerator(style: .light)
 
     private struct PhaseSpan {
         let phase: BreathPhase
@@ -156,38 +95,63 @@ struct BreathingGuideView: View {
                         .opacity(isActive ? 1 : 0)
                 }
             }
-            .onChange(of: now.phaseIndex) { _, _ in
-                if isActive { phaseTap.impactOccurred(intensity: 0.6) }
+            .onChange(of: timeline.date) { _, date in
+                pulseTick(at: date)
             }
-            .onChange(of: hapticIntensity(for: now, active: isActive)) { _, intensity in
-                haptics.update(
-                    intensity: intensity,
-                    at: timeline.date.timeIntervalSinceReferenceDate
-                )
+            .onChange(of: now.phaseIndex) { _, _ in
+                if isActive { phaseTap.impactOccurred(intensity: 0.7) }
             }
         }
         .onChange(of: isActive) { _, active in
             if active {
                 cycleStart = Date().addingTimeInterval(-frozenElapsed)
-                haptics.start()
+                nextPulseAt = Date().timeIntervalSinceReferenceDate + 0.3
+                pulse.prepare()
             } else {
                 frozenElapsed = currentElapsed(at: Date())
                 cycleStart = nil
-                haptics.stop()
             }
         }
         .onAppear {
             appearDate = Date()
+            pulse.prepare()
             if isActive {
                 frozenElapsed = 0
                 cycleStart = Date()
-                haptics.start()
+                nextPulseAt = Date().timeIntervalSinceReferenceDate + 0.3
             }
         }
-        .onDisappear {
-            haptics.stop()
+    }
+
+    // MARK: - Pulse train
+
+    private func pulseTick(at date: Date) {
+        guard isActive else { return }
+        let t = date.timeIntervalSinceReferenceDate
+        guard t >= nextPulseAt else { return }
+
+        let now = state(at: currentElapsed(at: date))
+        let (rate, intensity) = pulseParameters(kind: now.kind, bloom: now.bloom)
+        pulse.impactOccurred(intensity: intensity)
+        pulse.prepare()
+        nextPulseAt = t + 1.0 / rate
+    }
+
+    /// The mindful heartbeat: pulses quicken and strengthen with the bloom
+    /// on the way in, slow and soften on the way out, and rest to a faint
+    /// slow beat while holding.
+    private func pulseParameters(kind: BreathKind, bloom: Double) -> (rate: Double, intensity: Double) {
+        switch kind {
+        case .inhale:
+            return (1.3 + 3.5 * bloom, 0.35 + 0.60 * min(bloom, 1.0))
+        case .exhale:
+            return (1.2 + 3.1 * bloom, 0.30 + 0.55 * min(bloom, 1.0))
+        case .hold:
+            return (0.8, 0.22)
         }
     }
+
+    // MARK: - Visuals
 
     private func flower(bloom: Double) -> some View {
         ZStack {
@@ -221,29 +185,13 @@ struct BreathingGuideView: View {
         }
     }
 
+    // MARK: - Time
+
     private func currentElapsed(at date: Date) -> Double {
         if let cycleStart {
             return date.timeIntervalSince(cycleStart)
         }
         return frozenElapsed
-    }
-
-    /// The vibration mirrors the flower: stronger as it blooms, fading as
-    /// it folds, a faint presence during holds. Quantized slightly so the
-    /// onChange trigger fires at a calm ~haptic-friendly rate.
-    private func hapticIntensity(
-        for state: (phaseIndex: Int, label: String, secondsLeft: Int, kind: BreathKind, bloom: Double),
-        active: Bool
-    ) -> Double {
-        guard active else { return 0 }
-        let raw: Double
-        switch state.kind {
-        case .inhale, .exhale:
-            raw = 0.12 + 0.62 * state.bloom
-        case .hold:
-            raw = 0.08 + 0.10 * state.bloom
-        }
-        return (raw * 50).rounded() / 50 // 0.02 steps
     }
 
     /// Everything the view needs for a given moment, derived exactly from

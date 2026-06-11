@@ -24,7 +24,11 @@ struct SessionView: View {
     @State private var volume = 0.6
     @State private var ambientChoice: AmbientSound = .off
     @State private var ambientLevel = 0.5
-    @State private var controlsHidden = false
+    /// 0 = controls tray fully shown … 1 = fully tucked away. Driven live
+    /// by the drag gesture, so the tray tracks the finger like an iOS sheet.
+    @State private var hideProgress: CGFloat = 0
+    @State private var dragBase: CGFloat?
+    @State private var trayHeight: CGFloat = 300
 
     /// The end-of-session fade begins this many seconds before zero, so the
     /// sound reaches silence right as the timer does.
@@ -247,39 +251,42 @@ struct SessionView: View {
     // MARK: - Running
 
     private var session: some View {
-        VStack(spacing: 0) {
-            frequencyBadge
-                .padding(.top, 8)
+        ZStack(alignment: .bottom) {
+            VStack(spacing: 0) {
+                frequencyBadge
+                    .padding(.top, 8)
 
-            Spacer()
+                Spacer()
 
-            BreathingGuideView(
-                pattern: mode.breathing,
-                tint: mode.colors[0],
-                isActive: state == .running
-            )
+                BreathingGuideView(
+                    pattern: mode.breathing,
+                    tint: mode.colors[0],
+                    isActive: state == .running
+                )
 
-            Spacer()
+                Spacer()
 
-            if showExtend {
-                Button(action: extendSession) {
-                    Label("+5 minutes", systemImage: "plus")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 18)
-                        .padding(.vertical, 10)
-                        .background(mode.colors[0].opacity(0.55), in: Capsule())
+                if showExtend {
+                    Button(action: extendSession) {
+                        Label("+5 minutes", systemImage: "plus")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 18)
+                            .padding(.vertical, 10)
+                            .background(mode.colors[0].opacity(0.55), in: Capsule())
+                    }
+                    .padding(.bottom, 12)
+                    .transition(.opacity.combined(with: .scale(scale: 0.92)))
                 }
-                .padding(.bottom, 12)
-                .transition(.opacity.combined(with: .scale(scale: 0.92)))
-            }
 
-            timerPill
+                timerPill
 
-            if controlsHidden {
-                // Minimized: just a quiet handle to invite the swipe back up.
+                // Quiet handle that grows in as the tray departs, inviting
+                // the swipe (or tap) back up.
                 Button {
-                    withAnimation(.spring(duration: 0.45)) { controlsHidden = false }
+                    withAnimation(.spring(response: 0.42, dampingFraction: 0.85)) {
+                        hideProgress = 0
+                    }
                 } label: {
                     Image(systemName: "chevron.up")
                         .font(.subheadline.weight(.semibold))
@@ -288,30 +295,58 @@ struct SessionView: View {
                         .padding(.vertical, 9)
                         .background(.white.opacity(0.07), in: Capsule())
                 }
-                .padding(.top, 16)
-                .padding(.bottom, 30)
-                .transition(.opacity)
-            } else {
-                controls
-                    .padding(.top, 18)
-                    .padding(.bottom, 28)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                .opacity(Double(hideProgress))
+                .frame(height: 44 * hideProgress)
+                .padding(.top, 12 * hideProgress)
+                .allowsHitTesting(hideProgress > 0.7)
+
+                Spacer()
+                    .frame(height: 24)
             }
-        }
-        .padding(.horizontal, 20)
-        .contentShape(Rectangle())
-        .gesture(
-            DragGesture(minimumDistance: 35)
-                .onEnded { value in
-                    // Respond only to clearly vertical swipes so the volume
-                    // sliders keep their horizontal drags.
-                    let dy = value.translation.height
-                    guard abs(dy) > abs(value.translation.width) * 1.2 else { return }
-                    withAnimation(.spring(duration: 0.45)) {
-                        controlsHidden = dy > 0
+            .padding(.horizontal, 20)
+            .padding(.bottom, (1 - hideProgress) * (trayHeight + 12))
+
+            controls
+                .background(
+                    GeometryReader { proxy in
+                        Color.clear.preference(key: TrayHeightKey.self, value: proxy.size.height)
                     }
+                )
+                .padding(.horizontal, 20)
+                .padding(.bottom, 28)
+                .offset(y: hideProgress * (trayHeight + 90))
+        }
+        .onPreferenceChange(TrayHeightKey.self) { trayHeight = $0 }
+        .contentShape(Rectangle())
+        .gesture(trayGesture)
+    }
+
+    /// Apple-sheet-style interactive drag: the tray is glued to the finger,
+    /// can rest anywhere mid-gesture, and on release springs to the nearest
+    /// edge — or follows a decisive flick regardless of position.
+    private var trayGesture: some Gesture {
+        DragGesture(minimumDistance: 10)
+            .onChanged { value in
+                guard abs(value.translation.height) > abs(value.translation.width) else { return }
+                if dragBase == nil { dragBase = hideProgress }
+                let delta = value.translation.height / max(trayHeight, 1)
+                hideProgress = min(max((dragBase ?? 0) + delta, 0), 1)
+            }
+            .onEnded { value in
+                dragBase = nil
+                let flick = value.velocity.height
+                let target: CGFloat
+                if flick > 250 {
+                    target = 1
+                } else if flick < -250 {
+                    target = 0
+                } else {
+                    target = hideProgress > 0.5 ? 1 : 0
                 }
-        )
+                withAnimation(.spring(response: 0.42, dampingFraction: 0.85)) {
+                    hideProgress = target
+                }
+            }
     }
 
     /// Remaining time as a soft glass pill with a slim progress ring —
@@ -536,6 +571,13 @@ struct SessionView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
             dismiss()
         }
+    }
+}
+
+private struct TrayHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
     }
 }
 
