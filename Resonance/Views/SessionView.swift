@@ -298,23 +298,23 @@ struct SessionView: View {
 
                 timerPill
 
-                // Quiet handle that grows in as the tray departs, inviting
-                // the swipe (or tap) back up.
+                // The same grabber line, waiting at the bottom — pull up
+                // (or tap) and the tray rides back in.
                 Button {
-                    withAnimation(.spring(response: 0.42, dampingFraction: 0.85)) {
+                    withAnimation(.spring(response: 0.45, dampingFraction: 0.88)) {
                         hideProgress = 0
                     }
                 } label: {
-                    Image(systemName: "chevron.up")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.white.opacity(0.5))
-                        .padding(.horizontal, 28)
-                        .padding(.vertical, 9)
-                        .background(.white.opacity(0.07), in: Capsule())
+                    Capsule()
+                        .fill(.white.opacity(0.32))
+                        .frame(width: 40, height: 5)
+                        .padding(.vertical, 16)
+                        .padding(.horizontal, 60)
+                        .contentShape(Rectangle())
                 }
                 .opacity(Double(min(max(hideProgress, 0), 1)))
                 .frame(height: 44 * min(max(hideProgress, 0), 1))
-                .padding(.top, 12 * min(max(hideProgress, 0), 1))
+                .padding(.top, 8 * min(max(hideProgress, 0), 1))
                 .allowsHitTesting(hideProgress > 0.7)
 
                 Spacer()
@@ -331,22 +331,27 @@ struct SessionView: View {
                 )
                 .padding(.horizontal, 20)
                 .padding(.bottom, 28)
-                .offset(y: hideProgress * (trayHeight + 90))
+                .offset(y: hideProgress * exitDistance)
         }
         .onPreferenceChange(TrayHeightKey.self) { trayHeight = $0 }
         .contentShape(Rectangle())
         .gesture(trayGesture)
     }
 
+    /// How far the tray travels to fully leave the screen. Using the same
+    /// distance for both the finger mapping and the offset keeps the drag
+    /// exactly 1:1 under the finger, like a native sheet.
+    private var exitDistance: CGFloat { trayHeight + 90 }
+
     /// Apple-sheet-style interactive drag: the tray is glued to the finger,
     /// can rest anywhere mid-gesture, and on release springs to the nearest
     /// edge — or follows a decisive flick regardless of position.
     private var trayGesture: some Gesture {
-        DragGesture(minimumDistance: 10)
+        DragGesture(minimumDistance: 5)
             .onChanged { value in
                 guard abs(value.translation.height) > abs(value.translation.width) else { return }
                 if dragBase == nil { dragBase = hideProgress }
-                var p = (dragBase ?? 0) + value.translation.height / max(trayHeight, 1)
+                var p = (dragBase ?? 0) + value.translation.height / max(exitDistance, 1)
                 // Rubber-band past the edges, like a native sheet.
                 if p < 0 { p *= 0.25 }
                 if p > 1 { p = 1 + (p - 1) * 0.25 }

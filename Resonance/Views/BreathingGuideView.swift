@@ -90,7 +90,15 @@ struct BreathingGuideView: View {
                         .tracking(4.5)
                         .foregroundStyle(.white.opacity(0.78))
                         .id(isActive ? now.phaseIndex : -1)
-                        .transition(.opacity)
+                        // Sequenced, not simultaneous: the old phase name
+                        // fully dissolves before the new one breathes in,
+                        // so the spaced letters never overlap mid-fade.
+                        .transition(
+                            .asymmetric(
+                                insertion: .opacity.animation(.easeIn(duration: 0.45).delay(0.4)),
+                                removal: .opacity.animation(.easeOut(duration: 0.35))
+                            )
+                        )
 
                     Text("\(now.secondsLeft)")
                         .font(.system(size: 42, weight: .light, design: .rounded))
