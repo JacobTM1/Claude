@@ -299,23 +299,24 @@ struct SessionView: View {
                 timerPill
 
                 // The same grabber line, waiting at the bottom — pull up
-                // (or tap) and the tray rides back in.
-                Button {
-                    withAnimation(.spring(response: 0.45, dampingFraction: 0.88)) {
-                        hideProgress = 0
+                // (or tap) and the tray rides back in. Deliberately not a
+                // Button: buttons consume the touch, which kept the upward
+                // drag from tracking the finger.
+                Capsule()
+                    .fill(.white.opacity(0.32))
+                    .frame(width: 40, height: 5)
+                    .padding(.vertical, 16)
+                    .padding(.horizontal, 60)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        withAnimation(.spring(response: 0.45, dampingFraction: 0.88)) {
+                            hideProgress = 0
+                        }
                     }
-                } label: {
-                    Capsule()
-                        .fill(.white.opacity(0.32))
-                        .frame(width: 40, height: 5)
-                        .padding(.vertical, 16)
-                        .padding(.horizontal, 60)
-                        .contentShape(Rectangle())
-                }
-                .opacity(Double(min(max(hideProgress, 0), 1)))
-                .frame(height: 44 * min(max(hideProgress, 0), 1))
-                .padding(.top, 8 * min(max(hideProgress, 0), 1))
-                .allowsHitTesting(hideProgress > 0.7)
+                    .opacity(Double(min(max(hideProgress, 0), 1)))
+                    .frame(height: 44 * min(max(hideProgress, 0), 1))
+                    .padding(.top, 8 * min(max(hideProgress, 0), 1))
+                    .allowsHitTesting(hideProgress > 0.7)
 
                 Spacer()
                     .frame(height: 24)
@@ -335,7 +336,10 @@ struct SessionView: View {
         }
         .onPreferenceChange(TrayHeightKey.self) { trayHeight = $0 }
         .contentShape(Rectangle())
-        .gesture(trayGesture)
+        // Simultaneous so the drag tracks even when the touch lands on an
+        // interactive child (the grabber, chips, buttons) — the horizontal
+        // guard in the gesture keeps the sliders unaffected.
+        .simultaneousGesture(trayGesture)
     }
 
     /// How far the tray travels to fully leave the screen. Using the same
