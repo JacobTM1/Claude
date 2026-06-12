@@ -84,16 +84,32 @@ struct BreathingGuideView: View {
                 .frame(width: 310, height: 310)
                 .opacity(isActive ? 1 : 0.7)
 
-                VStack(spacing: 4) {
-                    Text(isActive ? now.label : "Paused")
-                        .font(.title2.weight(.semibold))
-                        .foregroundStyle(.white)
+                VStack(spacing: 10) {
+                    Text(isActive ? now.label.uppercased() : "PAUSED")
+                        .font(.subheadline.weight(.semibold))
+                        .tracking(4.5)
+                        .foregroundStyle(.white.opacity(0.78))
+                        .id(isActive ? now.phaseIndex : -1)
+                        .transition(.opacity)
+
                     Text("\(now.secondsLeft)")
-                        .font(.system(.title3, design: .rounded).weight(.medium))
-                        .foregroundStyle(.white.opacity(0.7))
+                        .font(.system(size: 42, weight: .light, design: .rounded))
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [.white, tint.opacity(0.8)],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                        .shadow(color: tint.opacity(0.5), radius: 14)
                         .monospacedDigit()
+                        .contentTransition(.numericText(countsDown: true))
                         .opacity(isActive ? 1 : 0)
                 }
+                // Meditation-paced transitions: phases dissolve into each
+                // other and the count rolls gently instead of snapping.
+                .animation(.easeInOut(duration: 0.8), value: now.phaseIndex)
+                .animation(.easeInOut(duration: 0.45), value: now.secondsLeft)
             }
             .onChange(of: timeline.date) { _, date in
                 pulseTick(at: date)

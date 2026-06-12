@@ -74,6 +74,11 @@ final class ToneEngine: ObservableObject {
     private var amplitude = 0.0
     private var targetAmplitude = 0.0
     private var toneRamp = 1e-5
+    /// Equal-loudness compensation: higher carriers (like the 528 Hz pure
+    /// tone) are perceived far louder than the low binaural carriers at the
+    /// same level, so they get scaled down to match.
+    private var toneScale = 1.0
+    private var pureTone = false
     private var ambientAmp = 0.0
     private var ambientTarget = 0.0
     private var ambientRamp = 1e-5
@@ -126,6 +131,8 @@ final class ToneEngine: ObservableObject {
 
         leftHz = mode.carrierHz
         rightHz = mode.carrierHz + mode.beatHz
+        toneScale = min(1.0, pow(200.0 / mode.carrierHz, 0.6))
+        pureTone = mode.isPureTone
         leftPhase = 0
         rightPhase = 0
         amplitude = 0
@@ -147,8 +154,14 @@ final class ToneEngine: ObservableObject {
                 self.ambientAmp = Self.step(self.ambientAmp, toward: self.ambientTarget, by: self.ambientRamp)
                 self.clock += 1.0 / self.sampleRate
 
-                var left = sin(self.leftPhase) * self.amplitude
-                var right = sin(self.rightPhase) * self.amplitude
+                var toneAmp = self.amplitude
+                if self.pureTone {
+                    // A barely-there slow shimmer keeps a long pure tone
+                    // from feeling like a static laser on the ear.
+                    toneAmp *= 0.92 + 0.08 * sin(2.0 * .pi * 0.08 * self.clock)
+                }
+                var left = sin(self.leftPhase) * toneAmp
+                var right = sin(self.rightPhase) * toneAmp
                 self.leftPhase += leftStep
                 if self.leftPhase > twoPi { self.leftPhase -= twoPi }
                 self.rightPhase += rightStep
@@ -227,7 +240,7 @@ final class ToneEngine: ObservableObject {
 
     private func retarget(seconds: Double) {
         guard sourceNode != nil, !fadingOut else { return }
-        let tone = isPlaying ? volume * Self.headroom : 0
+        let tone = isPlaying ? volume * Self.headroom * toneScale : 0
         let bed = (isPlaying && ambient != .off) ? ambientVolume * Self.ambientHeadroom : 0
         setTargets(tone: tone, ambient: bed, seconds: seconds)
     }

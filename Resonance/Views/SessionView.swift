@@ -227,12 +227,29 @@ struct SessionView: View {
                 .font(.title3.weight(.medium))
                 .foregroundStyle(.white.opacity(0.8))
 
-            Text("\(countdown)")
-                .font(.system(size: 110, weight: .thin, design: .rounded))
-                .foregroundStyle(.white)
-                .monospacedDigit()
-                .id(countdown)
-                .transition(.opacity)
+            ZStack {
+                Circle()
+                    .strokeBorder(.white.opacity(0.12), lineWidth: 1)
+                    .frame(width: 198, height: 198)
+                Circle()
+                    .fill(mode.colors[0].opacity(0.14))
+                    .frame(width: 176, height: 176)
+                    .blur(radius: 16)
+                Text("\(countdown)")
+                    .font(.system(size: 96, weight: .semibold, design: .rounded))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [.white, mode.colors[0].opacity(0.75)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    .shadow(color: mode.colors[0].opacity(0.65), radius: 24)
+                    .shadow(color: .white.opacity(0.25), radius: 6)
+                    .monospacedDigit()
+                    .id(countdown)
+                    .transition(.opacity)
+            }
 
             VStack(spacing: 8) {
                 Text(mode.breathing.name)
@@ -295,9 +312,9 @@ struct SessionView: View {
                         .padding(.vertical, 9)
                         .background(.white.opacity(0.07), in: Capsule())
                 }
-                .opacity(Double(hideProgress))
-                .frame(height: 44 * hideProgress)
-                .padding(.top, 12 * hideProgress)
+                .opacity(Double(min(max(hideProgress, 0), 1)))
+                .frame(height: 44 * min(max(hideProgress, 0), 1))
+                .padding(.top, 12 * min(max(hideProgress, 0), 1))
                 .allowsHitTesting(hideProgress > 0.7)
 
                 Spacer()
@@ -329,8 +346,11 @@ struct SessionView: View {
             .onChanged { value in
                 guard abs(value.translation.height) > abs(value.translation.width) else { return }
                 if dragBase == nil { dragBase = hideProgress }
-                let delta = value.translation.height / max(trayHeight, 1)
-                hideProgress = min(max((dragBase ?? 0) + delta, 0), 1)
+                var p = (dragBase ?? 0) + value.translation.height / max(trayHeight, 1)
+                // Rubber-band past the edges, like a native sheet.
+                if p < 0 { p *= 0.25 }
+                if p > 1 { p = 1 + (p - 1) * 0.25 }
+                hideProgress = p
             }
             .onEnded { value in
                 dragBase = nil
@@ -343,7 +363,7 @@ struct SessionView: View {
                 } else {
                     target = hideProgress > 0.5 ? 1 : 0
                 }
-                withAnimation(.spring(response: 0.42, dampingFraction: 0.85)) {
+                withAnimation(.spring(response: 0.45, dampingFraction: 0.88)) {
                     hideProgress = target
                 }
             }
@@ -392,6 +412,13 @@ struct SessionView: View {
 
     private var controls: some View {
         VStack(spacing: 16) {
+            // iOS-native grabber: shows where to pull the tray from.
+            Capsule()
+                .fill(.white.opacity(0.30))
+                .frame(width: 40, height: 5)
+                .padding(.top, -6)
+                .padding(.bottom, -4)
+
             HStack(spacing: 14) {
                 Image(systemName: "waveform")
                     .font(.footnote)
