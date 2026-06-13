@@ -1,20 +1,21 @@
 import SwiftUI
 
-struct HomeView: View {
-    @State private var showScience = false
+/// Top-level routes reachable from the home chooser.
+enum HomeRoute: Hashable {
+    case frequencies
+    case journey
+}
 
-    private let columns = [
-        GridItem(.flexible(), spacing: 14),
-        GridItem(.flexible(), spacing: 14),
-    ]
+/// The home screen now presents the app's two experiences as a top-level
+/// choice, in the existing visual language: Path A (Frequencies & Guided
+/// Meditation) and Path B (Journey of Souls).
+struct HomeView: View {
+    @State private var showSettings = false
 
     var body: some View {
         NavigationStack {
             ZStack {
                 AuroraBackground(colors: [.indigo, .purple], intensity: 1.15)
-
-                // Slow-drifting motes of light — the room feels alive before
-                // a single tap.
                 ParticleFieldView(
                     motion: .drift,
                     tint: Color(red: 0.72, green: 0.76, blue: 1.0),
@@ -22,39 +23,60 @@ struct HomeView: View {
                 )
 
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 24) {
+                    VStack(alignment: .leading, spacing: 22) {
                         header
-                        headphonesTip
-                        LazyVGrid(columns: columns, spacing: 14) {
-                            ForEach(MeditationMode.all) { mode in
-                                NavigationLink(value: mode.id) {
-                                    ModeCard(mode: mode)
-                                }
-                                .buttonStyle(.plain)
-                            }
+
+                        NavigationLink(value: HomeRoute.frequencies) {
+                            PathCard(
+                                title: "Frequencies & Guided Meditation",
+                                subtitle: "Stress relief, focus, healing, deep meditation — binaural tones with guided breath.",
+                                icon: "waveform.path",
+                                colors: [Color(red: 0.30, green: 0.30, blue: 0.78),
+                                         Color(red: 0.42, green: 0.30, blue: 0.74)]
+                            )
                         }
+                        .buttonStyle(.plain)
+
+                        NavigationLink(value: HomeRoute.journey) {
+                            PathCard(
+                                title: "Journey of Souls",
+                                subtitle: "A calm, guided inner journey — imagery and reflection, in your own quiet space.",
+                                icon: "moon.stars.fill",
+                                colors: [Color(red: 0.16, green: 0.20, blue: 0.46),
+                                         Color(red: 0.10, green: 0.10, blue: 0.28)],
+                                deepMood: true
+                            )
+                        }
+                        .buttonStyle(.plain)
                     }
                     .padding(.horizontal, 20)
+                    .padding(.top, 8)
                     .padding(.bottom, 32)
                 }
             }
-            .navigationDestination(for: String.self) { id in
-                if let mode = MeditationMode.all.first(where: { $0.id == id }) {
+            .navigationDestination(for: HomeRoute.self) { route in
+                switch route {
+                case .frequencies: FrequenciesView()
+                case .journey: JourneyEntryView()
+                }
+            }
+            .navigationDestination(for: ModeRoute.self) { route in
+                if let mode = MeditationMode.all.first(where: { $0.id == route.id }) {
                     SessionView(mode: mode)
                 }
             }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        showScience = true
+                        showSettings = true
                     } label: {
-                        Image(systemName: "info.circle")
+                        Image(systemName: "gearshape")
                             .foregroundStyle(.white.opacity(0.7))
                     }
                 }
             }
-            .sheet(isPresented: $showScience) {
-                ScienceView()
+            .sheet(isPresented: $showSettings) {
+                SettingsView()
             }
         }
     }
@@ -64,69 +86,64 @@ struct HomeView: View {
             Text("Resonance")
                 .font(.system(size: 38, weight: .bold, design: .rounded))
                 .foregroundStyle(.white)
-            Text("Frequency sound & guided breath")
+            Text("Choose your path")
                 .font(.subheadline)
                 .foregroundStyle(.white.opacity(0.55))
         }
         .padding(.top, 8)
     }
-
-    private var headphonesTip: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "airpods.max")
-                .font(.title3)
-                .foregroundStyle(.white.opacity(0.85))
-            Text("Wear headphones — binaural beats need a different tone in each ear.")
-                .font(.footnote)
-                .foregroundStyle(.white.opacity(0.7))
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .glassCard(cornerRadius: 16)
-    }
 }
 
-private struct ModeCard: View {
-    let mode: MeditationMode
+private struct PathCard: View {
+    let title: String
+    let subtitle: String
+    let icon: String
+    let colors: [Color]
+    var deepMood = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Image(systemName: mode.icon)
-                .font(.title2)
+        VStack(alignment: .leading, spacing: 14) {
+            Image(systemName: icon)
+                .font(.title)
                 .foregroundStyle(.white)
-                .frame(width: 44, height: 44)
+                .frame(width: 56, height: 56)
                 .background(.white.opacity(0.14), in: Circle())
 
-            Spacer(minLength: 14)
-
-            Text(mode.name)
-                .font(.headline)
+            Text(title)
+                .font(.title3.weight(.semibold))
                 .foregroundStyle(.white)
-                .lineLimit(2, reservesSpace: true)
-                .multilineTextAlignment(.leading)
 
-            Text(mode.bandLabel)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.white.opacity(0.85))
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(.white.opacity(0.14), in: Capsule())
-                .padding(.top, 6)
+            Text(subtitle)
+                .font(.subheadline)
+                .foregroundStyle(.white.opacity(0.72))
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 6) {
+                Text("Enter")
+                Image(systemName: "arrow.right")
+            }
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.white.opacity(0.9))
+            .padding(.top, 2)
         }
-        .padding(16)
+        .padding(22)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(height: 172)
+        .frame(height: 230)
         .background(
-            LinearGradient(
-                colors: [mode.colors[0].opacity(0.75), mode.colors[1].opacity(0.45)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            ),
-            in: RoundedRectangle(cornerRadius: 24, style: .continuous)
+            LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing),
+            in: RoundedRectangle(cornerRadius: 28, style: .continuous)
         )
+        .overlay(alignment: .topTrailing) {
+            if deepMood {
+                // A few faint stars to mark the cosmos-leaning path.
+                Image(systemName: "sparkles")
+                    .font(.title2)
+                    .foregroundStyle(.white.opacity(0.35))
+                    .padding(20)
+            }
+        }
         .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
                 .strokeBorder(.white.opacity(0.10))
         )
     }

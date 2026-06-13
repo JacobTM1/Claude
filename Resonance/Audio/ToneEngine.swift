@@ -59,6 +59,16 @@ final class ToneEngine: ObservableObject {
     private static let headroom = 0.25
     private static let ambientHeadroom = 0.16
 
+    /// Voice ducking: while a guiding voice speaks (Journey of Souls), the
+    /// tone and bed dip to this fraction so words stay clear.
+    private var duckMultiplier = 1.0
+
+    /// Dips the tone + ambient bed under a speaking voice, or restores them.
+    func setDucked(_ ducked: Bool) {
+        duckMultiplier = ducked ? 0.4 : 1.0
+        retarget(seconds: 0.4)
+    }
+
     private let engine = AVAudioEngine()
     private var sourceNode: AVAudioSourceNode?
     private let sampleRate: Double = 44_100
@@ -128,12 +138,32 @@ final class ToneEngine: ObservableObject {
     }
 
     func start(mode: MeditationMode) {
+        start(
+            carrierHz: mode.carrierHz,
+            beatHz: mode.beatHz,
+            pureTone: mode.isPureTone,
+            title: mode.name,
+            subtitle: "Resonance · \(mode.bandLabel)"
+        )
+    }
+
+    /// Lower-level entry used by both the frequency modes and the Journey of
+    /// Souls bed, so the engine, fades, lock-screen and interruption logic
+    /// are shared rather than duplicated.
+    func start(
+        carrierHz: Double,
+        beatHz: Double,
+        pureTone isPure: Bool,
+        title: String,
+        subtitle: String
+    ) {
         teardown()
 
-        leftHz = mode.carrierHz
-        rightHz = mode.carrierHz + mode.beatHz
-        toneScale = min(1.0, pow(200.0 / mode.carrierHz, 0.6))
-        pureTone = mode.isPureTone
+        leftHz = carrierHz
+        rightHz = carrierHz + beatHz
+        toneScale = min(1.0, pow(200.0 / carrierHz, 0.6))
+        pureTone = isPure
+        duckMultiplier = 1.0
         leftPhase = 0
         rightPhase = 0
         amplitude = 0
@@ -192,7 +222,7 @@ final class ToneEngine: ObservableObject {
             try engine.start()
             isPlaying = true
             retarget(seconds: 3.0) // luxurious fade-in to open the session
-            publishNowPlaying(mode: mode)
+            publishNowPlaying(title: title, subtitle: subtitle)
         } catch {
             print("ToneEngine failed to start: \(error)")
         }
@@ -262,8 +292,8 @@ final class ToneEngine: ObservableObject {
 
     private func retarget(seconds: Double) {
         guard sourceNode != nil, !fadingOut else { return }
-        let tone = isPlaying ? volume * Self.headroom * toneScale : 0
-        let bed = (isPlaying && ambient != .off) ? ambientVolume * Self.ambientHeadroom : 0
+        let tone = isPlaying ? volume * Self.headroom * toneScale * duckMultiplier : 0
+        let bed = (isPlaying && ambient != .off) ? ambientVolume * Self.ambientHeadroom * duckMultiplier : 0
         setTargets(tone: tone, ambient: bed, seconds: seconds)
     }
 
@@ -466,10 +496,10 @@ final class ToneEngine: ObservableObject {
 
     // MARK: - Lock screen integration
 
-    private func publishNowPlaying(mode: MeditationMode) {
+    private func publishNowPlaying(title: String, subtitle: String) {
         MPNowPlayingInfoCenter.default().nowPlayingInfo = [
-            MPMediaItemPropertyTitle: mode.name,
-            MPMediaItemPropertyArtist: "Resonance · \(mode.bandLabel)",
+            MPMediaItemPropertyTitle: title,
+            MPMediaItemPropertyArtist: subtitle,
             MPNowPlayingInfoPropertyIsLiveStream: true,
             MPNowPlayingInfoPropertyPlaybackRate: 1.0,
         ]
