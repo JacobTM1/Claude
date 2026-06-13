@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import WebKit
 
 /// Hosts the bundled `index.html` weather map in a full-screen WKWebView.
