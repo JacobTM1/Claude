@@ -15,6 +15,20 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v4
 
+      - name: Inject backend secrets
+        env:
+          BACKEND_URL: ${{ secrets.BACKEND_URL }}
+          APP_SHARED_SECRET: ${{ secrets.APP_SHARED_SECRET }}
+        run: |
+          mkdir -p Resonance/Generated
+          cat > Resonance/Generated/Secrets.swift <<EOF
+          enum Secrets {
+              static let backendURL = "${BACKEND_URL}"
+              static let appSharedSecret = "${APP_SHARED_SECRET}"
+              static var isConfigured: Bool { !backendURL.isEmpty && !appSharedSecret.isEmpty }
+          }
+          EOF
+
       - name: Build app without code signing
         run: |
           xcodebuild \

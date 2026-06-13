@@ -24,6 +24,21 @@ jobs:
             echo "::notice::TestFlight secrets not configured yet — skipping upload. Add APP_STORE_CONNECT_KEY, APP_STORE_CONNECT_KEY_ID, APP_STORE_CONNECT_ISSUER_ID and APPLE_TEAM_ID in repo Settings → Secrets and variables → Actions."
           fi
 
+      - name: Inject backend secrets
+        if: steps.check.outputs.configured == 'true'
+        env:
+          BACKEND_URL: ${{ secrets.BACKEND_URL }}
+          APP_SHARED_SECRET: ${{ secrets.APP_SHARED_SECRET }}
+        run: |
+          mkdir -p Resonance/Generated
+          cat > Resonance/Generated/Secrets.swift <<EOF
+          enum Secrets {
+              static let backendURL = "${BACKEND_URL}"
+              static let appSharedSecret = "${APP_SHARED_SECRET}"
+              static var isConfigured: Bool { !backendURL.isEmpty && !appSharedSecret.isEmpty }
+          }
+          EOF
+
       - name: Select latest Xcode
         if: steps.check.outputs.configured == 'true'
         run: |

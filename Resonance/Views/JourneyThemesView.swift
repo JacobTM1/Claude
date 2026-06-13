@@ -71,9 +71,15 @@ struct JourneyThemesView: View {
         .navigationBarTitleDisplayMode(.inline)
         .fullScreenCover(isPresented: $launch) {
             if let theme = selectedTheme {
-                JourneySessionView(theme: theme, minutes: minutes,
-                                   adaptiveEnabled: adaptiveEnabled,
-                                   reflection: reflection.isEmpty ? nil : reflection)
+                if Secrets.isConfigured {
+                    // Live, interactive guide (backend voice + spoken replies).
+                    LiveJourneySessionView(theme: theme, minutes: minutes)
+                } else {
+                    // On-device fallback (scripted, synthesized voice).
+                    JourneySessionView(theme: theme, minutes: minutes,
+                                       adaptiveEnabled: adaptiveEnabled,
+                                       reflection: reflection.isEmpty ? nil : reflection)
+                }
             }
         }
     }

@@ -4,6 +4,10 @@
 <dict>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Resonance listens during a Journey of Souls session so your guide can hear and respond to you.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Resonance turns your spoken words into text so your guide can understand and respond to you.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>
