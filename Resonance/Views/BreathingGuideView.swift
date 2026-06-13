@@ -123,7 +123,7 @@ struct BreathingGuideView: View {
                 pulseTick(at: date)
             }
             .onChange(of: now.phaseIndex) { _, _ in
-                if isActive { phaseTap.impactOccurred(intensity: 0.7) }
+                if isActive { phaseTap.impactOccurred(intensity: 0.9) }
             }
         }
         .onChange(of: isActive) { _, active in
@@ -165,13 +165,14 @@ struct BreathingGuideView: View {
     /// on the way in, slow and soften on the way out, and rest to a faint
     /// slow beat while holding.
     private func pulseParameters(kind: BreathKind, bloom: Double) -> (rate: Double, intensity: Double) {
+        // Intensities are ~30% stronger than the first tuning, capped at 1.
         switch kind {
         case .inhale:
-            return (1.3 + 3.5 * bloom, 0.35 + 0.60 * min(bloom, 1.0))
+            return (1.3 + 3.5 * bloom, min(1.0, 0.46 + 0.78 * min(bloom, 1.0)))
         case .exhale:
-            return (1.2 + 3.1 * bloom, 0.30 + 0.55 * min(bloom, 1.0))
+            return (1.2 + 3.1 * bloom, min(1.0, 0.39 + 0.72 * min(bloom, 1.0)))
         case .hold:
-            return (0.8, 0.22)
+            return (0.8, 0.29)
         }
     }
 

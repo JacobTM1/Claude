@@ -124,6 +124,7 @@ final class ToneEngine: ObservableObject {
 
     init() {
         registerRemoteCommands()
+        registerAudioSessionObservers()
     }
 
     func start(mode: MeditationMode) {
@@ -201,8 +202,29 @@ final class ToneEngine: ObservableObject {
         guard sourceNode != nil else { return }
         fadingOut = false
         isPlaying = !paused
+        // Resuming after a phone call or another app played audio leaves our
+        // session deactivated and the engine stopped — bring both back before
+        // ramping the level up, or "Resume" would move a target on dead audio.
+        if !paused {
+            reactivateSession()
+        }
         retarget(seconds: 1.5)
         updateNowPlayingRate()
+    }
+
+    /// Reactivates the audio session and restarts the engine if an
+    /// interruption (call, Siri, another app's audio) left them down.
+    private func reactivateSession() {
+        guard sourceNode != nil else { return }
+        do {
+            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
+            try AVAudioSession.sharedInstance().setActive(true)
+            if !engine.isRunning {
+                try engine.start()
+            }
+        } catch {
+            print("ToneEngine failed to reactivate: \(error)")
+        }
     }
 
     /// Fades out over ~1 s, then releases the audio engine.
@@ -459,6 +481,64 @@ final class ToneEngine: ObservableObject {
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
     }
 
+    // MARK: - Interruption handling
+
+    /// True while an interruption (call, Siri, another app) has us paused,
+    /// so we know whether to auto-resume — but only if the user hadn't
+    /// already paused on purpose.
+    private var interruptedWhilePlaying = false
+
+    private func registerAudioSessionObservers() {
+        let center = NotificationCenter.default
+        center.addObserver(
+            self,
+            selector: #selector(handleInterruption(_:)),
+            name: AVAudioSession.interruptionNotification,
+            object: nil
+        )
+        // If the media server resets, the engine graph is invalid — rebuild
+        // it on next resume.
+        center.addObserver(
+            self,
+            selector: #selector(handleMediaReset),
+            name: AVAudioSession.mediaServicesWereResetNotification,
+            object: nil
+        )
+    }
+
+    @objc private func handleInterruption(_ notification: Notification) {
+        guard let info = notification.userInfo,
+              let raw = info[AVAudioSessionInterruptionTypeKey] as? UInt,
+              let type = AVAudioSession.InterruptionType(rawValue: raw) else { return }
+
+        switch type {
+        case .began:
+            // The system has already ducked us to silence; mirror that in
+            // our own state so the UI shows "paused" and remember to resume.
+            if isPlaying {
+                interruptedWhilePlaying = true
+                isPlaying = false
+                retarget(seconds: 0.2)
+                updateNowPlayingRate()
+            }
+        case .ended:
+            guard interruptedWhilePlaying else { return }
+            interruptedWhilePlaying = false
+            let shouldResume = (info[AVAudioSessionInterruptionOptionKey] as? UInt)
+                .map { AVAudioSession.InterruptionOptions(rawValue: $0).contains(.shouldResume) } ?? true
+            if shouldResume {
+                setPaused(false)
+            }
+        @unknown default:
+            break
+        }
+    }
+
+    @objc private func handleMediaReset() {
+        // Force a fresh session + engine start on the next resume.
+        interruptedWhilePlaying = isPlaying
+    }
+
     private func registerRemoteCommands() {
         let center = MPRemoteCommandCenter.shared()
         let bindings: [(MPRemoteCommand, (ToneEngine) -> Void)] = [
@@ -477,6 +557,7 @@ final class ToneEngine: ObservableObject {
     }
 
     deinit {
+        NotificationCenter.default.removeObserver(self)
         for (command, target) in remoteCommandTargets {
             command.removeTarget(target)
         }

@@ -379,12 +379,15 @@ struct SessionView: View {
     }
 
     /// Remaining time as a soft glass pill with a slim progress ring —
-    /// quieter and more organic than bare digits.
+    /// quieter and more organic than bare digits. As the controls tray is
+    /// pulled away, the "remaining" label fades out and the whole pill grows
+    /// ~30% so the time reads cleanly in the bare immersive view.
     private var timerPill: some View {
         let total = Double(totalSeconds)
         let progress = total > 0
             ? min(max(1.0 - Double(max(remainingSeconds, 0)) / total, 0), 1)
             : 0
+        let reveal = min(max(hideProgress, 0), 1)
 
         return HStack(spacing: 12) {
             ZStack {
@@ -410,13 +413,18 @@ struct SessionView: View {
                 .foregroundStyle(.white.opacity(0.92))
                 .monospacedDigit()
 
-            Text("remaining")
-                .font(.footnote)
-                .foregroundStyle(.white.opacity(0.45))
+            if reveal < 0.4 {
+                Text("remaining")
+                    .font(.footnote)
+                    .foregroundStyle(.white.opacity(0.45))
+                    .transition(.opacity.combined(with: .move(edge: .trailing)))
+            }
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 11)
         .glassCard(cornerRadius: 26)
+        .scaleEffect(1 + 0.30 * reveal, anchor: .center)
+        .animation(.easeOut(duration: 0.25), value: reveal < 0.4)
     }
 
     private var controls: some View {
