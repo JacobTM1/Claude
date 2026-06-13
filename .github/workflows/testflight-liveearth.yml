@@ -1,0 +1,90 @@
+name: Upload LiveEarth to TestFlight
+
+# Independent of the Resonance pipeline: this workflow only ever builds the
+# LiveEarth scheme and only runs on the LiveEarth branch (or manual dispatch),
+# so the Resonance app is never touched.
+on:
+  push:
+    branches:
+      - claude/live-earth-weather-map-aqcii3
+  workflow_dispatch:
+
+jobs:
+  upload:
+    name: Archive and upload LiveEarth to TestFlight
+    runs-on: macos-15
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Check signing secrets
+        id: check
+        run: |
+          configured="${{ secrets.APP_STORE_CONNECT_KEY != '' && secrets.APP_STORE_CONNECT_KEY_ID != '' && secrets.APP_STORE_CONNECT_ISSUER_ID != '' && secrets.APPLE_TEAM_ID != '' }}"
+          echo "configured=$configured" >> "$GITHUB_OUTPUT"
+          if [ "$configured" != "true" ]; then
+            echo "::notice::TestFlight secrets not configured yet — skipping upload. Add APP_STORE_CONNECT_KEY, APP_STORE_CONNECT_KEY_ID, APP_STORE_CONNECT_ISSUER_ID and APPLE_TEAM_ID in repo Settings → Secrets and variables → Actions."
+          fi
+
+      - name: Select latest Xcode
+        if: steps.check.outputs.configured == 'true'
+        run: |
+          echo "Installed Xcode versions:"
+          ls -d /Applications/Xcode*.app
+          LATEST=$(ls -d /Applications/Xcode_*.app | sort -t_ -k2 -n | tail -1)
+          echo "Selecting: $LATEST"
+          sudo xcode-select -s "$LATEST/Contents/Developer"
+          xcodebuild -version
+
+      - name: Write App Store Connect API key
+        if: steps.check.outputs.configured == 'true'
+        env:
+          APP_STORE_CONNECT_KEY: ${{ secrets.APP_STORE_CONNECT_KEY }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/keys"
+          printf '%s\n' "$APP_STORE_CONNECT_KEY" > "$RUNNER_TEMP/keys/AuthKey.p8"
+
+      - name: Archive with cloud-managed signing
+        if: steps.check.outputs.configured == 'true'
+        run: |
+          xcodebuild archive \
+            -project LiveEarth.xcodeproj \
+            -scheme LiveEarth \
+            -configuration Release \
+            -destination "generic/platform=iOS" \
+            -archivePath "$RUNNER_TEMP/LiveEarth.xcarchive" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/keys/AuthKey.p8" \
+            -authenticationKeyID "${{ secrets.APP_STORE_CONNECT_KEY_ID }}" \
+            -authenticationKeyIssuerID "${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}" \
+            DEVELOPMENT_TEAM="${{ secrets.APPLE_TEAM_ID }}" \
+            CODE_SIGN_STYLE=Automatic \
+            CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER"
+
+      - name: Export and upload to TestFlight
+        if: steps.check.outputs.configured == 'true'
+        run: |
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>app-store-connect</string>
+            <key>destination</key>
+            <string>upload</string>
+            <key>teamID</key>
+            <string>${{ secrets.APPLE_TEAM_ID }}</string>
+            <key>uploadSymbols</key>
+            <true/>
+          </dict>
+          </plist>
+          PLIST
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/LiveEarth.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -exportPath "$RUNNER_TEMP/export" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/keys/AuthKey.p8" \
+            -authenticationKeyID "${{ secrets.APP_STORE_CONNECT_KEY_ID }}" \
+            -authenticationKeyIssuerID "${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}"
