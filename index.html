@@ -1,0 +1,906 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Live Earth — Weather & Route Radar</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#05070d" />
+<link href="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css" rel="stylesheet" />
+<script src="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.js"></script>
+<style>
+  :root{
+    --bg:#05070d;
+    --panel:rgba(14,20,34,0.66);
+    --panel-solid:rgba(14,20,34,0.92);
+    --stroke:rgba(120,170,255,0.16);
+    --stroke-soft:rgba(255,255,255,0.07);
+    --txt:#eaf2ff;
+    --txt-dim:#9fb2d6;
+    --txt-faint:#6b7ea0;
+    --blue:#3da8ff;
+    --blue-bright:#6fc3ff;
+    --amber:#ffb454;
+    --red:#ff5a5f;
+    --radius:18px;
+    --shadow:0 16px 48px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.05);
+    --blur:saturate(160%) blur(22px);
+    --tap:46px;
+    --safe-t:env(safe-area-inset-top,0px);
+    --safe-b:env(safe-area-inset-bottom,0px);
+    --safe-l:env(safe-area-inset-left,0px);
+    --safe-r:env(safe-area-inset-right,0px);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",system-ui,sans-serif;
+    color:var(--txt);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;}
+  #map{position:absolute;inset:0;background:
+    radial-gradient(1200px 800px at 70% -10%, #0b1730 0%, #05070d 60%, #02030a 100%);}
+  .maplibregl-ctrl-attrib{display:none !important;}
+  .maplibregl-canvas{outline:none;}
+
+  /* ---------- shared panel ---------- */
+  .glass{
+    background:var(--panel);
+    -webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);
+    border:1px solid var(--stroke);
+    border-radius:var(--radius);
+    box-shadow:var(--shadow);
+  }
+  .float{position:absolute;z-index:20;}
+
+  /* ---------- top-left: brand + search ---------- */
+  #topleft{top:calc(14px + var(--safe-t));left:calc(14px + var(--safe-l));width:min(340px,calc(100vw - 28px));}
+  .brand{display:flex;align-items:center;gap:10px;padding:11px 14px 9px;}
+  .brand .globe{width:26px;height:26px;border-radius:50%;flex:0 0 auto;
+    background:radial-gradient(circle at 32% 30%, #6fc3ff, #1f6fd6 55%, #0a2a55 100%);
+    box-shadow:0 0 14px rgba(61,168,255,0.55), inset -3px -4px 8px rgba(0,0,0,0.5);}
+  .brand h1{font-size:15px;font-weight:700;letter-spacing:.3px;margin:0;line-height:1;}
+  .brand h1 span{color:var(--blue-bright);}
+  .brand small{display:block;font-size:10.5px;color:var(--txt-faint);font-weight:500;margin-top:3px;letter-spacing:.4px;}
+  .searchwrap{position:relative;padding:0 10px 10px;}
+  .searchbar{display:flex;align-items:center;gap:8px;background:rgba(0,0,0,0.32);
+    border:1px solid var(--stroke-soft);border-radius:13px;padding:0 12px;height:var(--tap);}
+  .searchbar svg{flex:0 0 auto;opacity:.7}
+  .searchbar input{flex:1;background:none;border:none;outline:none;color:var(--txt);
+    font-size:15px;height:100%;min-width:0;}
+  .searchbar input::placeholder{color:var(--txt-faint);}
+  .search-clear{background:none;border:none;color:var(--txt-faint);font-size:18px;cursor:pointer;
+    width:26px;height:26px;border-radius:50%;display:none;align-items:center;justify-content:center;}
+  .search-clear.show{display:flex;}
+  .results{position:absolute;left:10px;right:10px;top:calc(100% - 4px);max-height:50vh;overflow-y:auto;
+    border-radius:13px;display:none;}
+  .results.show{display:block;}
+  .result{padding:11px 14px;border-bottom:1px solid var(--stroke-soft);cursor:pointer;font-size:13.5px;line-height:1.35;}
+  .result:last-child{border-bottom:none;}
+  .result:hover,.result:active{background:rgba(61,168,255,0.14);}
+  .result b{color:var(--txt);font-weight:600;display:block;}
+  .result span{color:var(--txt-faint);font-size:11.5px;}
+
+  /* ---------- top-right: layers ---------- */
+  #layerbtn{top:calc(14px + var(--safe-t));right:calc(14px + var(--safe-r));width:var(--tap);height:var(--tap);
+    display:flex;align-items:center;justify-content:center;cursor:pointer;border-radius:14px;}
+  #layerbtn svg{opacity:.9}
+  #layerpanel{top:calc(14px + var(--safe-t));right:calc(14px + var(--safe-r));width:min(290px,calc(100vw - 28px));
+    padding:6px;display:none;transform-origin:top right;}
+  #layerpanel.show{display:block;animation:pop .18s ease;}
+  @keyframes pop{from{opacity:0;transform:scale(.94) translateY(-6px)}to{opacity:1;transform:none}}
+  .lp-head{display:flex;align-items:center;justify-content:space-between;padding:8px 10px 6px;}
+  .lp-head h2{margin:0;font-size:12px;letter-spacing:1.2px;text-transform:uppercase;color:var(--txt-dim);font-weight:700;}
+  .lp-head .x{background:none;border:none;color:var(--txt-faint);font-size:20px;cursor:pointer;width:30px;height:30px;}
+  .layer-row{padding:9px 10px;border-radius:12px;}
+  .layer-row+.layer-row{margin-top:2px;}
+  .lr-top{display:flex;align-items:center;gap:11px;}
+  .lr-dot{width:11px;height:11px;border-radius:3px;flex:0 0 auto;box-shadow:0 0 8px currentColor;}
+  .lr-label{flex:1;min-width:0;}
+  .lr-label b{font-size:14px;font-weight:600;display:block;line-height:1.2;}
+  .lr-label small{font-size:11px;color:var(--txt-faint);}
+  /* toggle */
+  .toggle{position:relative;width:46px;height:27px;flex:0 0 auto;cursor:pointer;}
+  .toggle input{opacity:0;width:0;height:0;position:absolute;}
+  .toggle .track{position:absolute;inset:0;background:rgba(255,255,255,0.13);border-radius:20px;transition:.22s;}
+  .toggle .knob{position:absolute;top:3px;left:3px;width:21px;height:21px;border-radius:50%;background:#fff;transition:.22s;box-shadow:0 2px 5px rgba(0,0,0,.4);}
+  .toggle input:checked+.track{background:linear-gradient(90deg,#2b86e0,#3da8ff);}
+  .toggle input:checked+.track+.knob{transform:translateX(19px);}
+  .opacity-row{display:flex;align-items:center;gap:10px;padding:8px 2px 2px;}
+  .opacity-row span{font-size:10.5px;color:var(--txt-faint);width:54px;flex:0 0 auto;letter-spacing:.3px;}
+  input[type=range]{-webkit-appearance:none;appearance:none;height:5px;border-radius:5px;flex:1;
+    background:rgba(255,255,255,0.15);outline:none;}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:19px;height:19px;border-radius:50%;
+    background:var(--blue-bright);cursor:pointer;box-shadow:0 0 10px rgba(61,168,255,.7);border:2px solid #07101f;}
+  input[type=range]::-moz-range-thumb{width:19px;height:19px;border-radius:50%;background:var(--blue-bright);
+    border:2px solid #07101f;cursor:pointer;box-shadow:0 0 10px rgba(61,168,255,.7);}
+  .lp-divider{height:1px;background:var(--stroke-soft);margin:6px 10px;}
+  .basemap-toggle{display:flex;gap:6px;padding:4px 10px 8px;}
+  .bm-btn{flex:1;height:38px;border-radius:11px;border:1px solid var(--stroke-soft);background:rgba(0,0,0,.25);
+    color:var(--txt-dim);font-size:12.5px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:.18s;}
+  .bm-btn.active{background:linear-gradient(180deg,rgba(61,168,255,.28),rgba(61,168,255,.12));color:#fff;border-color:rgba(61,168,255,.5);}
+
+  /* ---------- bottom-right: zoom + locate ---------- */
+  #navctrl{right:calc(14px + var(--safe-r));bottom:calc(132px + var(--safe-b));display:flex;flex-direction:column;gap:10px;}
+  .roundbtn{width:var(--tap);height:var(--tap);border-radius:14px;display:flex;align-items:center;justify-content:center;
+    cursor:pointer;border:1px solid var(--stroke);color:var(--txt);background:var(--panel);
+    -webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);box-shadow:var(--shadow);font-size:22px;font-weight:300;transition:.15s;}
+  .roundbtn:active{transform:scale(.93);}
+  .roundbtn.locate{color:var(--blue-bright);font-size:20px;}
+  .roundbtn.locate.active{background:linear-gradient(180deg,rgba(61,168,255,.4),rgba(61,168,255,.15));}
+  .zoomgroup{display:flex;flex-direction:column;border-radius:14px;overflow:hidden;border:1px solid var(--stroke);
+    background:var(--panel);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);box-shadow:var(--shadow);}
+  .zoomgroup .roundbtn{border:none;border-radius:0;box-shadow:none;background:none;backdrop-filter:none;}
+  .zoomgroup .roundbtn+.roundbtn{border-top:1px solid var(--stroke-soft);}
+
+  /* ---------- bottom: timeline ---------- */
+  #timeline{left:calc(14px + var(--safe-l));right:calc(14px + var(--safe-r));bottom:calc(14px + var(--safe-b));
+    padding:12px 16px 13px;}
+  .tl-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:9px;}
+  .tl-stamp{min-width:0;}
+  .tl-time{font-size:21px;font-weight:700;letter-spacing:.3px;line-height:1;font-variant-numeric:tabular-nums;}
+  .tl-date{font-size:11.5px;color:var(--txt-dim);margin-top:4px;letter-spacing:.3px;}
+  .tl-tag{font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;padding:3px 8px;border-radius:6px;
+    background:rgba(61,168,255,.18);color:var(--blue-bright);display:inline-block;margin-left:8px;vertical-align:2px;}
+  .tl-tag.fc{background:rgba(255,180,84,.18);color:var(--amber);}
+  .tl-speed{font-size:12px;font-weight:700;color:var(--txt-dim);background:rgba(0,0,0,.3);border:1px solid var(--stroke-soft);
+    border-radius:10px;height:34px;padding:0 13px;cursor:pointer;flex:0 0 auto;letter-spacing:.3px;}
+  .tl-track{position:relative;height:30px;display:flex;align-items:center;}
+  #scrubber{width:100%;margin:0;}
+  #scrubber::-webkit-slider-runnable-track{height:6px;border-radius:6px;
+    background:linear-gradient(90deg,var(--blue) 0%, var(--blue) var(--fill,40%), rgba(255,255,255,.13) var(--fill,40%));}
+  .tl-now{position:absolute;top:-2px;width:2px;height:34px;background:rgba(255,255,255,.45);pointer-events:none;border-radius:2px;}
+  .tl-now::after{content:"NOW";position:absolute;top:-13px;left:50%;transform:translateX(-50%);font-size:8px;color:var(--txt-faint);letter-spacing:.5px;}
+  .tl-ctrls{display:flex;align-items:center;justify-content:center;gap:18px;margin-top:8px;}
+  .tl-btn{background:none;border:none;color:var(--txt);cursor:pointer;width:42px;height:42px;display:flex;align-items:center;justify-content:center;border-radius:50%;transition:.15s;}
+  .tl-btn:active{background:rgba(255,255,255,.08);}
+  .tl-play{width:54px;height:54px;background:linear-gradient(180deg,#3da8ff,#1f6fd6);box-shadow:0 6px 18px rgba(31,111,214,.5);}
+  .tl-play:active{transform:scale(.94);}
+
+  /* ---------- spinner ---------- */
+  #spinner{top:calc(14px + var(--safe-t));left:50%;transform:translateX(-50%);z-index:30;display:none;align-items:center;gap:9px;
+    padding:9px 15px;font-size:12.5px;color:var(--txt-dim);border-radius:30px;}
+  #spinner.show{display:flex;}
+  .spin{width:15px;height:15px;border:2px solid rgba(255,255,255,.18);border-top-color:var(--blue-bright);border-radius:50%;animation:rot .7s linear infinite;}
+  @keyframes rot{to{transform:rotate(360deg)}}
+
+  /* ---------- toasts ---------- */
+  #toasts{position:absolute;bottom:calc(150px + var(--safe-b));left:50%;transform:translateX(-50%);z-index:40;
+    display:flex;flex-direction:column;gap:8px;align-items:center;width:max-content;max-width:calc(100vw - 28px);pointer-events:none;}
+  .toast{padding:10px 16px;border-radius:12px;font-size:13px;color:var(--txt);background:var(--panel-solid);
+    -webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--stroke);box-shadow:var(--shadow);
+    animation:toastin .3s ease;display:flex;align-items:center;gap:9px;max-width:100%;}
+  .toast.err{border-color:rgba(255,90,95,.4);} .toast.err .ic{color:var(--red);}
+  .toast.ok .ic{color:#5fd38a;}
+  .toast .ic{font-size:15px;flex:0 0 auto;}
+  @keyframes toastin{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+
+  /* ---------- credits ---------- */
+  #credits{left:calc(14px + var(--safe-l));bottom:calc(150px + var(--safe-b));z-index:15;font-size:9.5px;color:var(--txt-faint);
+    background:rgba(5,7,13,.45);padding:4px 9px;border-radius:8px;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
+    max-width:calc(100vw - 28px);line-height:1.3;pointer-events:none;}
+  #credits b{color:var(--txt-dim);font-weight:600;}
+
+  /* ---------- popup ---------- */
+  .maplibregl-popup-content{background:var(--panel-solid)!important;-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);
+    border:1px solid var(--stroke)!important;border-radius:14px!important;box-shadow:var(--shadow)!important;color:var(--txt)!important;
+    padding:13px 15px!important;font-size:13px;max-width:280px!important;}
+  .maplibregl-popup-close-button{color:var(--txt-faint)!important;font-size:20px!important;padding:2px 8px!important;}
+  .maplibregl-popup-tip{border-top-color:var(--panel-solid)!important;border-bottom-color:var(--panel-solid)!important;}
+  .pop-coord{font-size:11px;color:var(--txt-faint);letter-spacing:.3px;margin-bottom:6px;font-variant-numeric:tabular-nums;}
+  .pop-alert{border-radius:10px;padding:9px 11px;margin-top:8px;background:rgba(255,90,95,.1);border-left:3px solid var(--red);}
+  .pop-alert.sev-amber{background:rgba(255,180,84,.1);border-left-color:var(--amber);}
+  .pop-alert.sev-yellow{background:rgba(255,224,102,.1);border-left-color:#ffe066;}
+  .pop-alert h4{margin:0 0 4px;font-size:13px;font-weight:700;line-height:1.25;}
+  .pop-alert p{margin:0;font-size:11.5px;color:var(--txt-dim);line-height:1.45;max-height:120px;overflow-y:auto;}
+  .pop-none{font-size:12px;color:var(--txt-faint);}
+
+  .mk-pulse{width:18px;height:18px;border-radius:50%;background:var(--blue-bright);border:2.5px solid #fff;
+    box-shadow:0 0 0 rgba(61,168,255,.6);animation:pulse 2s infinite;}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(61,168,255,.55)}70%{box-shadow:0 0 0 18px rgba(61,168,255,0)}100%{box-shadow:0 0 0 0 rgba(61,168,255,0)}}
+
+  @media (max-width:520px){
+    #topleft{width:calc(100vw - 28px);}
+    .tl-time{font-size:19px;}
+    #credits{display:none;}
+  }
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<!-- spinner -->
+<div id="spinner" class="glass float"><div class="spin"></div><span id="spinner-txt">Loading weather frames…</span></div>
+
+<!-- top-left: brand + search -->
+<div id="topleft" class="float">
+  <div class="glass">
+    <div class="brand">
+      <div class="globe"></div>
+      <div>
+        <h1>LIVE <span>EARTH</span></h1>
+        <small>WEATHER · RADAR · ROUTE WATCH</small>
+      </div>
+    </div>
+    <div class="searchwrap">
+      <div class="searchbar">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#9fb2d6" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        <input id="search" type="text" placeholder="Search city or place…" autocomplete="off" inputmode="search" />
+        <button class="search-clear" id="search-clear" aria-label="Clear">×</button>
+      </div>
+      <div class="results glass" id="results"></div>
+    </div>
+  </div>
+</div>
+
+<!-- top-right: layers -->
+<div id="layerbtn" class="glass float" role="button" aria-label="Layers">
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#eaf2ff" stroke-width="2" stroke-linejoin="round"><path d="M12 2 2 7l10 5 10-5-10-5Z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></svg>
+</div>
+<div id="layerpanel" class="glass float">
+  <div class="lp-head"><h2>Layers</h2><button class="x" id="lp-close" aria-label="Close">×</button></div>
+
+  <div class="layer-row">
+    <div class="lr-top">
+      <span class="lr-dot" style="background:#bcdcff;color:#bcdcff"></span>
+      <div class="lr-label"><b>Satellite clouds</b><small>Infrared imagery</small></div>
+      <label class="toggle"><input type="checkbox" id="t-sat" checked><span class="track"></span><span class="knob"></span></label>
+    </div>
+    <div class="opacity-row"><span>OPACITY</span><input type="range" id="op-sat" min="0" max="100" value="72"></div>
+  </div>
+
+  <div class="layer-row">
+    <div class="lr-top">
+      <span class="lr-dot" style="background:#36d1c4;color:#36d1c4"></span>
+      <div class="lr-label"><b>Precipitation</b><small>RainViewer radar</small></div>
+      <label class="toggle"><input type="checkbox" id="t-radar" checked><span class="track"></span><span class="knob"></span></label>
+    </div>
+    <div class="opacity-row"><span>OPACITY</span><input type="range" id="op-radar" min="0" max="100" value="85"></div>
+  </div>
+
+  <div class="layer-row">
+    <div class="lr-top">
+      <span class="lr-dot" style="background:#ff5a5f;color:#ff5a5f"></span>
+      <div class="lr-label"><b>Weather alerts</b><small>NWS / NOAA (US)</small></div>
+      <label class="toggle"><input type="checkbox" id="t-alerts" checked><span class="track"></span><span class="knob"></span></label>
+    </div>
+  </div>
+
+  <div class="layer-row">
+    <div class="lr-top">
+      <span class="lr-dot" style="background:#1a2747;color:#1a2747;box-shadow:0 0 8px rgba(0,0,0,.5)"></span>
+      <div class="lr-label"><b>Day / night</b><small>Terminator shading</small></div>
+      <label class="toggle"><input type="checkbox" id="t-term" checked><span class="track"></span><span class="knob"></span></label>
+    </div>
+  </div>
+
+  <div class="lp-divider"></div>
+  <div class="basemap-toggle">
+    <button class="bm-btn" id="bm-day" data-style="liberty">☀︎ Day</button>
+    <button class="bm-btn active" id="bm-dark" data-style="dark">☾ Dark</button>
+  </div>
+</div>
+
+<!-- bottom-right: nav -->
+<div id="navctrl" class="float">
+  <button class="roundbtn locate" id="locate" aria-label="Locate me">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3.2"/><path d="M12 2v3.5M12 18.5V22M2 12h3.5M18.5 12H22"/></svg>
+  </button>
+  <div class="zoomgroup">
+    <button class="roundbtn" id="zin" aria-label="Zoom in">+</button>
+    <button class="roundbtn" id="zout" aria-label="Zoom out">−</button>
+  </div>
+</div>
+
+<!-- bottom: timeline -->
+<div id="timeline" class="glass float">
+  <div class="tl-head">
+    <div class="tl-stamp">
+      <div class="tl-time" id="tl-time">--:--</div>
+      <div class="tl-date" id="tl-date">Connecting to weather service…<span class="tl-tag" id="tl-tag" style="display:none"></span></div>
+    </div>
+    <button class="tl-speed" id="speed">0.5×</button>
+  </div>
+  <div class="tl-track">
+    <input type="range" id="scrubber" min="0" max="0" value="0" step="1" disabled />
+    <div class="tl-now" id="tl-now" style="display:none"></div>
+  </div>
+  <div class="tl-ctrls">
+    <button class="tl-btn" id="step-back" aria-label="Previous frame">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M18 5v14l-9-7 9-7Z"/><rect x="5" y="5" width="2.4" height="14" rx="1"/></svg>
+    </button>
+    <button class="tl-btn tl-play" id="playpause" aria-label="Play / pause">
+      <svg id="ic-play" width="22" height="22" viewBox="0 0 24 24" fill="#fff"><path d="M7 4.5v15l13-7.5L7 4.5Z"/></svg>
+      <svg id="ic-pause" width="22" height="22" viewBox="0 0 24 24" fill="#fff" style="display:none"><rect x="6" y="4.5" width="4.4" height="15" rx="1.4"/><rect x="13.6" y="4.5" width="4.4" height="15" rx="1.4"/></svg>
+    </button>
+    <button class="tl-btn" id="step-fwd" aria-label="Next frame">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M6 5v14l9-7-9-7Z"/><rect x="16.6" y="5" width="2.4" height="14" rx="1"/></svg>
+    </button>
+  </div>
+</div>
+
+<div id="credits" class="float">Radar &amp; satellite <b>RainViewer</b> · Alerts <b>NWS/NOAA</b> · Base <b>OpenFreeMap</b> · Geocoding <b>OpenStreetMap</b></div>
+<div id="toasts"></div>
+
+<script>
+"use strict";
+(function(){
+  /* ============================================================
+     CONFIG / STATE  (all state in JS variables — no storage)
+     ============================================================ */
+  const STYLES = {
+    liberty:"https://tiles.openfreemap.org/styles/liberty",
+    dark:"https://tiles.openfreemap.org/styles/dark",
+    positron:"https://tiles.openfreemap.org/styles/positron",
+    bright:"https://tiles.openfreemap.org/styles/bright"
+  };
+  const RV_INDEX = "https://api.rainviewer.com/public/weather-maps.json";
+  const NWS_URL  = "https://api.weather.gov/alerts/active?status=actual&message_type=alert";
+  const NOMINATIM = "https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=5&q=";
+
+  const SPEEDS = [
+    {ms:1000,label:"0.25×"}, {ms:500,label:"0.5×"}, {ms:300,label:"1×"}, {ms:150,label:"2×"}
+  ];
+
+  const state = {
+    currentStyle:"dark",
+    rv:null,                 // parsed rainviewer json
+    host:"",
+    radarFrames:[],          // past + nowcast  (master timeline)
+    satFrames:[],            // infrared
+    nearestSat:[],           // aligned to radarFrames -> sat frame or null
+    nowIndex:0,              // index of the "present" frame (last past)
+    idx:0,                   // current displayed index
+    playing:false,
+    speedIdx:1,
+    playTimer:null,
+    layers:{satellite:true, radar:true, alerts:true, terminator:true},
+    opacity:{satellite:0.72, radar:0.85},
+    createdRadar:new Set(),
+    createdSat:new Set(),
+    lastRadarId:null,
+    lastSatId:null,
+    alerts:null,
+    locMarker:null,
+    termTimer:null,
+    rvTimer:null
+  };
+
+  const $ = id => document.getElementById(id);
+
+  /* ============================================================
+     TOASTS / SPINNER
+     ============================================================ */
+  function toast(msg, kind){
+    const box = $("toasts");
+    const el = document.createElement("div");
+    el.className = "toast " + (kind||"");
+    const ic = kind==="err" ? "⚠" : kind==="ok" ? "✓" : "ⓘ";
+    el.innerHTML = '<span class="ic">'+ic+'</span><span></span>';
+    el.lastChild.textContent = msg;
+    box.appendChild(el);
+    setTimeout(()=>{ el.style.transition="opacity .4s, transform .4s"; el.style.opacity="0"; el.style.transform="translateY(8px)";
+      setTimeout(()=>el.remove(),420); }, 4200);
+  }
+  let spinCount = 0;
+  function spinner(on, txt){
+    spinCount = Math.max(0, spinCount + (on?1:-1));
+    if(txt) $("spinner-txt").textContent = txt;
+    $("spinner").classList.toggle("show", spinCount>0);
+  }
+
+  /* ============================================================
+     MAP INIT
+     ============================================================ */
+  const map = new maplibregl.Map({
+    container:"map",
+    style:STYLES[state.currentStyle],
+    center:[-95, 39],
+    zoom:2.4,
+    minZoom:1,
+    maxZoom:18,
+    attributionControl:false,
+    hash:false,
+    dragRotate:false,
+    fadeDuration:120
+  });
+  window._map = map;
+
+  map.on("error", e=>{ /* swallow tile errors; keep app alive */ });
+
+  // Apply globe projection + atmosphere whenever the style (re)loads.
+  map.on("style.load", ()=>{
+    try { map.setProjection({type:"globe"}); } catch(e){}
+    try {
+      map.setSky({
+        "sky-color":"#0a1a3a",
+        "sky-horizon-blend":0.5,
+        "horizon-color":"#0e2a55",
+        "horizon-fog-blend":0.6,
+        "fog-color":"#05070d",
+        "fog-ground-blend":0.5,
+        "atmosphere-blend":["interpolate",["linear"],["zoom"],0,1,6,0.4,9,0]
+      });
+    } catch(e){}
+    rebuildWeatherLayers();
+  });
+
+  map.on("load", ()=>{
+    loadRainViewer();
+    loadAlerts();
+    startTerminator();
+    // periodic refresh
+    state.rvTimer = setInterval(loadRainViewer, 5*60*1000);
+    setInterval(loadAlerts, 5*60*1000);
+  });
+
+  /* ============================================================
+     WEATHER FRAME LAYERS (RainViewer)
+     ============================================================ */
+  function radarTiles(frame){
+    return [ state.host + frame.path + "/256/{z}/{x}/{y}/2/1_1.png" ];
+  }
+  function satTiles(frame){
+    return [ state.host + frame.path + "/256/{z}/{x}/{y}/0/0_0.png" ];
+  }
+  const radId = t => "rv-radar-"+t;
+  const satId = t => "rv-sat-"+t;
+
+  function ensureRadar(frame){
+    if(!frame) return null;
+    const id = radId(frame.time);
+    if(!map.getSource(id)){
+      try{
+        map.addSource(id,{type:"raster",tiles:radarTiles(frame),tileSize:256,maxzoom:7,attribution:"RainViewer"});
+        map.addLayer({id,type:"raster",source:id,
+          paint:{"raster-opacity":0,"raster-opacity-transition":{duration:220},"raster-resampling":"linear"}});
+        state.createdRadar.add(frame.time);
+      }catch(e){ return null; }
+    }
+    return id;
+  }
+  function ensureSat(frame){
+    if(!frame) return null;
+    const id = satId(frame.time);
+    if(!map.getSource(id)){
+      try{
+        map.addSource(id,{type:"raster",tiles:satTiles(frame),tileSize:256,maxzoom:7,attribution:"RainViewer"});
+        map.addLayer({id,type:"raster",source:id,
+          paint:{"raster-opacity":0,"raster-opacity-transition":{duration:220},"raster-resampling":"linear"}});
+        state.createdSat.add(frame.time);
+      }catch(e){ return null; }
+    }
+    return id;
+  }
+
+  // keep z-order: satellite (bottom) -> radar -> terminator -> alerts (top)
+  function restack(){
+    try{
+      state.createdSat.forEach(t=>{ if(map.getLayer(satId(t))) map.moveLayer(satId(t)); });
+      state.createdRadar.forEach(t=>{ if(map.getLayer(radId(t))) map.moveLayer(radId(t)); });
+      if(map.getLayer("terminator")) map.moveLayer("terminator");
+      ["alerts-fill","alerts-line"].forEach(l=>{ if(map.getLayer(l)) map.moveLayer(l); });
+    }catch(e){}
+  }
+
+  function setOpacity(id, v){ try{ if(map.getLayer(id)) map.setPaintProperty(id,"raster-opacity",v); }catch(e){} }
+
+  function showFrame(i){
+    if(!state.radarFrames.length) return;
+    i = ((i % state.radarFrames.length) + state.radarFrames.length) % state.radarFrames.length;
+    state.idx = i;
+    const rFrame = state.radarFrames[i];
+    const sFrame = state.nearestSat[i];
+
+    // --- radar ---
+    let newRad = null;
+    if(state.layers.radar && rFrame){
+      newRad = ensureRadar(rFrame);
+      const next = state.radarFrames[(i+1)%state.radarFrames.length];
+      if(next) ensureRadar(next); // preload neighbor
+    }
+    // --- satellite ---
+    let newSat = null;
+    if(state.layers.satellite && sFrame){
+      newSat = ensureSat(sFrame);
+    }
+    restack();
+
+    if(newSat !== state.lastSatId){
+      if(state.lastSatId) setOpacity(state.lastSatId, 0);
+      state.lastSatId = newSat;
+    }
+    if(newRad !== state.lastRadarId){
+      if(state.lastRadarId) setOpacity(state.lastRadarId, 0);
+      state.lastRadarId = newRad;
+    }
+    if(newSat) setOpacity(newSat, state.layers.satellite ? state.opacity.satellite : 0);
+    if(newRad) setOpacity(newRad, state.layers.radar ? state.opacity.radar : 0);
+
+    updateTimeUI(rFrame, i);
+  }
+
+  function updateTimeUI(frame, i){
+    if(!frame) return;
+    const d = new Date(frame.time*1000);
+    $("tl-time").textContent = d.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});
+    $("tl-date").firstChild.textContent = d.toLocaleDateString([], {weekday:"short",month:"short",day:"numeric"}) + "  ";
+    const tag = $("tl-tag");
+    const isForecast = i > state.nowIndex;
+    tag.style.display = "inline-block";
+    if(isForecast){ tag.textContent = "Forecast"; tag.className = "tl-tag fc"; }
+    else if(i === state.nowIndex){ tag.textContent = "Now"; tag.className = "tl-tag"; }
+    else { tag.textContent = "Past"; tag.className = "tl-tag"; }
+    const sc = $("scrubber");
+    sc.value = i;
+    const pct = state.radarFrames.length>1 ? (i/(state.radarFrames.length-1))*100 : 0;
+    sc.style.setProperty("--fill", pct.toFixed(1)+"%");
+  }
+
+  // Rebuild everything after a style swap (sources are wiped by setStyle)
+  function rebuildWeatherLayers(){
+    state.createdRadar.clear();
+    state.createdSat.clear();
+    state.lastRadarId = null;
+    state.lastSatId = null;
+    if(state.alerts) addAlertLayers(state.alerts);
+    addTerminatorLayer();
+    if(state.radarFrames.length) showFrame(state.idx);
+  }
+
+  /* ============================================================
+     LOAD RAINVIEWER INDEX (with retry)
+     ============================================================ */
+  async function fetchJSON(url, opts, tries){
+    tries = tries || 3;
+    let lastErr;
+    for(let a=0;a<tries;a++){
+      try{
+        const r = await fetch(url, opts);
+        if(!r.ok) throw new Error("HTTP "+r.status);
+        return await r.json();
+      }catch(e){
+        lastErr = e;
+        await new Promise(res=>setTimeout(res, 800*Math.pow(2,a)));
+      }
+    }
+    throw lastErr;
+  }
+
+  async function loadRainViewer(){
+    spinner(true, "Loading weather frames…");
+    try{
+      const j = await fetchJSON(RV_INDEX, {cache:"no-store"}, 4);
+      state.rv = j;
+      state.host = j.host;
+      const past = (j.radar && j.radar.past) || [];
+      const now  = (j.radar && j.radar.nowcast) || [];
+      const sat  = (j.satellite && j.satellite.infrared) || [];
+
+      const wasFirst = state.radarFrames.length === 0;
+      state.radarFrames = past.concat(now);
+      state.satFrames = sat;
+      state.nowIndex = Math.max(0, past.length - 1);
+
+      // align nearest satellite frame to each radar frame by time
+      state.nearestSat = state.radarFrames.map(rf=>{
+        if(!sat.length) return null;
+        let best=sat[0], bd=Math.abs(sat[0].time-rf.time);
+        for(let k=1;k<sat.length;k++){
+          const d=Math.abs(sat[k].time-rf.time);
+          if(d<bd){bd=d;best=sat[k];}
+        }
+        return best;
+      });
+
+      const sc = $("scrubber");
+      sc.max = Math.max(0, state.radarFrames.length-1);
+      sc.disabled = false;
+
+      // position the NOW marker
+      const nowEl = $("tl-now");
+      if(state.radarFrames.length>1){
+        nowEl.style.display = "block";
+        nowEl.style.left = ((state.nowIndex/(state.radarFrames.length-1))*100)+"%";
+      }
+
+      if(wasFirst){ state.idx = state.nowIndex; }
+      // refresh visible layer set against (possibly) new frame times
+      state.lastRadarId = null; state.lastSatId = null;
+      showFrame(state.idx);
+      if(wasFirst) toast("Weather frames loaded", "ok");
+    }catch(e){
+      toast("Weather data unavailable — retrying", "err");
+      $("tl-date").firstChild.textContent = "Weather feed offline ";
+    }finally{
+      spinner(false);
+    }
+  }
+
+  /* ============================================================
+     TIMELINE CONTROLS
+     ============================================================ */
+  function play(){
+    if(!state.radarFrames.length) return;
+    state.playing = true;
+    $("ic-play").style.display="none"; $("ic-pause").style.display="block";
+    clearTimeout(state.playTimer);
+    const tick = ()=>{
+      if(!state.playing) return;
+      showFrame(state.idx+1);
+      state.playTimer = setTimeout(tick, SPEEDS[state.speedIdx].ms);
+    };
+    state.playTimer = setTimeout(tick, SPEEDS[state.speedIdx].ms);
+  }
+  function pause(){
+    state.playing = false;
+    clearTimeout(state.playTimer);
+    $("ic-play").style.display="block"; $("ic-pause").style.display="none";
+  }
+  $("playpause").onclick = ()=> state.playing ? pause() : play();
+  $("step-fwd").onclick = ()=>{ pause(); showFrame(state.idx+1); };
+  $("step-back").onclick = ()=>{ pause(); showFrame(state.idx-1); };
+  $("scrubber").addEventListener("input", e=>{ pause(); showFrame(parseInt(e.target.value,10)); });
+  $("speed").onclick = ()=>{
+    state.speedIdx = (state.speedIdx+1) % SPEEDS.length;
+    $("speed").textContent = SPEEDS[state.speedIdx].label;
+    if(state.playing){ pause(); play(); }
+  };
+
+  /* ============================================================
+     LAYER PANEL
+     ============================================================ */
+  const layerBtn = $("layerbtn"), layerPanel = $("layerpanel");
+  layerBtn.onclick = ()=> layerPanel.classList.toggle("show");
+  $("lp-close").onclick = ()=> layerPanel.classList.remove("show");
+
+  $("t-sat").onchange = e=>{ state.layers.satellite = e.target.checked; showFrame(state.idx); };
+  $("t-radar").onchange = e=>{ state.layers.radar = e.target.checked; showFrame(state.idx); };
+  $("t-alerts").onchange = e=>{
+    state.layers.alerts = e.target.checked;
+    const v = e.target.checked ? "visible":"none";
+    ["alerts-fill","alerts-line"].forEach(l=>{ if(map.getLayer(l)) map.setLayoutProperty(l,"visibility",v); });
+  };
+  $("t-term").onchange = e=>{
+    state.layers.terminator = e.target.checked;
+    if(map.getLayer("terminator")) map.setLayoutProperty("terminator","visibility", e.target.checked?"visible":"none");
+  };
+  $("op-sat").oninput = e=>{
+    state.opacity.satellite = e.target.value/100;
+    if(state.lastSatId && state.layers.satellite) setOpacity(state.lastSatId, state.opacity.satellite);
+  };
+  $("op-radar").oninput = e=>{
+    state.opacity.radar = e.target.value/100;
+    if(state.lastRadarId && state.layers.radar) setOpacity(state.lastRadarId, state.opacity.radar);
+  };
+
+  // base map day/dark
+  function switchStyle(name){
+    if(state.currentStyle===name) return;
+    state.currentStyle = name;
+    $("bm-day").classList.toggle("active", name==="liberty");
+    $("bm-dark").classList.toggle("active", name==="dark");
+    map.setStyle(STYLES[name]); // style.load handler rebuilds overlays
+  }
+  $("bm-day").onclick = ()=> switchStyle("liberty");
+  $("bm-dark").onclick = ()=> switchStyle("dark");
+
+  /* ============================================================
+     WEATHER ALERTS (NWS)
+     ============================================================ */
+  function sevClass(sev){
+    if(sev==="Extreme"||sev==="Severe") return "red";
+    if(sev==="Moderate") return "amber";
+    return "yellow";
+  }
+  function addAlertLayers(geojson){
+    try{
+      if(!map.getSource("alerts")){
+        map.addSource("alerts",{type:"geojson",data:geojson});
+      } else {
+        map.getSource("alerts").setData(geojson);
+        return;
+      }
+      const sevColor = ["match",["get","severity"],
+        "Extreme","#ff3b3f","Severe","#ff5a5f","Moderate","#ffb454","Minor","#ffe066",
+        "#8fb6ff"];
+      map.addLayer({id:"alerts-fill",type:"fill",source:"alerts",
+        paint:{"fill-color":sevColor,"fill-opacity":0.22}});
+      map.addLayer({id:"alerts-line",type:"line",source:"alerts",
+        paint:{"line-color":sevColor,"line-width":1.4,"line-opacity":0.85}});
+      const vis = state.layers.alerts ? "visible":"none";
+      map.setLayoutProperty("alerts-fill","visibility",vis);
+      map.setLayoutProperty("alerts-line","visibility",vis);
+    }catch(e){}
+  }
+  async function loadAlerts(){
+    try{
+      const j = await fetchJSON(NWS_URL, {headers:{"Accept":"application/geo+json"}}, 3);
+      // keep only polygon features (point alerts have no geometry to draw)
+      const feats = (j.features||[]).filter(f=>f.geometry &&
+        (f.geometry.type==="Polygon"||f.geometry.type==="MultiPolygon"));
+      const fc = {type:"FeatureCollection",features:feats};
+      state.alerts = fc;
+      addAlertLayers(fc);
+      restack();
+    }catch(e){
+      // non-blocking: alerts simply absent
+    }
+  }
+
+  /* ============================================================
+     CLICK → popup (coords + covering alert)
+     ============================================================ */
+  map.on("click", e=>{
+    const {lng, lat} = e.lngLat;
+    let html = '<div class="pop-coord">'+lat.toFixed(4)+"°, "+lng.toFixed(4)+"°</div>";
+    let feats = [];
+    try{
+      if(map.getLayer("alerts-fill") && state.layers.alerts){
+        feats = map.queryRenderedFeatures(e.point, {layers:["alerts-fill"]});
+      }
+    }catch(err){}
+    if(feats.length){
+      // build safely with DOM to avoid injection from external alert text
+      const container = document.createElement("div");
+      container.innerHTML = html;
+      const seen2 = new Set();
+      feats.slice(0,3).forEach(f=>{
+        const p = f.properties || {};
+        const key = p.id||p.headline;
+        if(seen2.has(key)) return; seen2.add(key);
+        const box = document.createElement("div");
+        box.className = "pop-alert sev-"+sevClass(p.severity);
+        const h = document.createElement("h4"); h.textContent = p.event || p.headline || "Weather Alert";
+        const pp = document.createElement("p");
+        let desc = (p.headline? p.headline+"\n":"") + (p.description||"");
+        desc = desc.trim(); if(desc.length>360) desc = desc.slice(0,360)+"…";
+        pp.textContent = desc || "Active alert in this area.";
+        box.appendChild(h); box.appendChild(pp); container.appendChild(box);
+      });
+      new maplibregl.Popup({maxWidth:"280px"}).setLngLat(e.lngLat).setDOMContent(container).addTo(map);
+      return;
+    }
+    const container = document.createElement("div");
+    container.innerHTML = html + '<div class="pop-none">No active weather alerts at this point.</div>';
+    new maplibregl.Popup({maxWidth:"280px"}).setLngLat(e.lngLat).setDOMContent(container).addTo(map);
+  });
+  map.on("mouseenter","alerts-fill",()=>{ map.getCanvas().style.cursor="pointer"; });
+  map.on("mouseleave","alerts-fill",()=>{ map.getCanvas().style.cursor=""; });
+
+  /* ============================================================
+     NAV: zoom + locate
+     ============================================================ */
+  $("zin").onclick = ()=> map.zoomIn({duration:300});
+  $("zout").onclick = ()=> map.zoomOut({duration:300});
+
+  $("locate").onclick = ()=>{
+    if(!navigator.geolocation){ toast("Geolocation not supported", "err"); return; }
+    const btn = $("locate"); btn.classList.add("active");
+    toast("Locating…");
+    navigator.geolocation.getCurrentPosition(
+      pos=>{
+        btn.classList.remove("active");
+        const {longitude:lng, latitude:lat} = pos.coords;
+        if(state.locMarker) state.locMarker.remove();
+        const el = document.createElement("div"); el.className="mk-pulse";
+        state.locMarker = new maplibregl.Marker({element:el}).setLngLat([lng,lat]).addTo(map);
+        map.flyTo({center:[lng,lat], zoom:8, speed:1.4, curve:1.5, essential:true});
+        toast("You are here", "ok");
+      },
+      err=>{ btn.classList.remove("active"); toast("Location unavailable", "err"); },
+      {enableHighAccuracy:true, timeout:10000, maximumAge:60000}
+    );
+  };
+
+  /* ============================================================
+     SEARCH (Nominatim, debounced)
+     ============================================================ */
+  const searchEl = $("search"), resultsEl = $("results"), clearEl = $("search-clear");
+  let searchTimer = null, searchAbort = null;
+
+  function renderResults(list){
+    resultsEl.innerHTML = "";
+    if(!list || !list.length){ resultsEl.classList.remove("show"); return; }
+    list.forEach(r=>{
+      const div = document.createElement("div"); div.className="result";
+      const name = r.display_name.split(",")[0];
+      const rest = r.display_name.split(",").slice(1).join(",").trim();
+      const b = document.createElement("b"); b.textContent = name;
+      const s = document.createElement("span"); s.textContent = rest;
+      div.appendChild(b); div.appendChild(s);
+      div.onclick = ()=>{
+        map.flyTo({center:[parseFloat(r.lon),parseFloat(r.lat)], zoom: r.type==="city"?9:11, speed:1.3, curve:1.5, essential:true});
+        resultsEl.classList.remove("show");
+        searchEl.blur();
+      };
+      resultsEl.appendChild(div);
+    });
+    resultsEl.classList.add("show");
+  }
+
+  async function doSearch(q){
+    if(searchAbort) searchAbort.abort();
+    searchAbort = new AbortController();
+    try{
+      const r = await fetch(NOMINATIM + encodeURIComponent(q), {
+        signal:searchAbort.signal,
+        headers:{"Accept":"application/json"}
+      });
+      if(!r.ok) throw new Error("HTTP "+r.status);
+      const list = await r.json();
+      renderResults(list);
+    }catch(e){
+      if(e.name!=="AbortError") toast("Search unavailable", "err");
+    }
+  }
+
+  searchEl.addEventListener("input", e=>{
+    const q = e.target.value.trim();
+    clearEl.classList.toggle("show", q.length>0);
+    clearTimeout(searchTimer);
+    if(q.length<2){ resultsEl.classList.remove("show"); return; }
+    searchTimer = setTimeout(()=>doSearch(q), 400);
+  });
+  searchEl.addEventListener("keydown", e=>{
+    if(e.key==="Enter"){
+      const first = resultsEl.querySelector(".result");
+      if(first) first.click();
+    }
+  });
+  clearEl.onclick = ()=>{ searchEl.value=""; clearEl.classList.remove("show"); resultsEl.classList.remove("show"); searchEl.focus(); };
+  document.addEventListener("click", e=>{
+    if(!$("topleft").contains(e.target)) resultsEl.classList.remove("show");
+    if(!layerPanel.contains(e.target) && !layerBtn.contains(e.target)) layerPanel.classList.remove("show");
+  });
+
+  /* ============================================================
+     DAY / NIGHT TERMINATOR
+     ============================================================ */
+  function subsolarPoint(date){
+    // approximate subsolar lat (declination) & lng
+    const rad = Math.PI/180;
+    const start = Date.UTC(date.getUTCFullYear(),0,0);
+    const dayOfYear = (Date.UTC(date.getUTCFullYear(),date.getUTCMonth(),date.getUTCDate()) - start)/86400000;
+    const decl = -23.44 * Math.cos(rad*(360/365)*(dayOfYear+10));
+    const utcHours = date.getUTCHours() + date.getUTCMinutes()/60 + date.getUTCSeconds()/3600;
+    const lng = (12 - utcHours) * 15;
+    return {lat:decl, lng:((lng+540)%360)-180};
+  }
+  function terminatorPolygon(date){
+    const rad = Math.PI/180, deg = 180/Math.PI;
+    const sun = subsolarPoint(date);
+    const decl = sun.lat * rad;
+    const pts = [];
+    for(let l=-180; l<=180; l+=2){
+      const H = (l - sun.lng) * rad;             // hour angle
+      let lat = Math.atan(-Math.cos(H)/Math.tan(decl)) * deg;
+      pts.push([l, lat]);
+    }
+    // close toward the dark pole (opposite hemisphere of the sun)
+    const darkPole = decl > 0 ? -90 : 90;
+    const ring = pts.concat([[180,darkPole],[-180,darkPole],[pts[0][0],pts[0][1]]]);
+    return {type:"Feature",geometry:{type:"Polygon",coordinates:[ring]},properties:{}};
+  }
+  function addTerminatorLayer(){
+    try{
+      const data = {type:"FeatureCollection",features:[terminatorPolygon(new Date())]};
+      if(!map.getSource("terminator")){
+        map.addSource("terminator",{type:"geojson",data});
+        map.addLayer({id:"terminator",type:"fill",source:"terminator",
+          paint:{"fill-color":"#020512","fill-opacity":0.38}});
+      } else {
+        map.getSource("terminator").setData(data);
+      }
+      map.setLayoutProperty("terminator","visibility", state.layers.terminator?"visible":"none");
+    }catch(e){}
+  }
+  function startTerminator(){
+    addTerminatorLayer();
+    clearInterval(state.termTimer);
+    state.termTimer = setInterval(()=>{
+      try{ if(map.getSource("terminator")) map.getSource("terminator").setData(
+        {type:"FeatureCollection",features:[terminatorPolygon(new Date())]}); }catch(e){}
+    }, 60*1000);
+  }
+
+})();
+</script>
+</body>
+</html>
