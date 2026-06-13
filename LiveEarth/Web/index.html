@@ -111,9 +111,10 @@
   input[type=range]::-moz-range-thumb{width:19px;height:19px;border-radius:50%;background:var(--blue-bright);
     border:2px solid #07101f;cursor:pointer;box-shadow:0 0 10px rgba(61,168,255,.7);}
   .lp-divider{height:1px;background:var(--stroke-soft);margin:6px 10px;}
-  .basemap-toggle{display:flex;gap:6px;padding:4px 10px 8px;}
-  .bm-btn{flex:1;height:38px;border-radius:11px;border:1px solid var(--stroke-soft);background:rgba(0,0,0,.25);
-    color:var(--txt-dim);font-size:12.5px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:.18s;}
+  .basemap-toggle{display:flex;gap:5px;padding:4px 10px 8px;}
+  .bm-btn{flex:1;min-width:0;height:38px;border-radius:11px;border:1px solid var(--stroke-soft);background:rgba(0,0,0,.25);
+    color:var(--txt-dim);font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;
+    white-space:nowrap;transition:.18s;}
   .bm-btn.active{background:linear-gradient(180deg,rgba(61,168,255,.28),rgba(61,168,255,.12));color:#fff;border-color:rgba(61,168,255,.5);}
 
   /* ---------- bottom-right: zoom + locate ---------- */
@@ -239,7 +240,7 @@
   <div class="layer-row">
     <div class="lr-top">
       <span class="lr-dot" style="background:#bcdcff;color:#bcdcff"></span>
-      <div class="lr-label"><b>Satellite clouds</b><small>Infrared imagery</small></div>
+      <div class="lr-label"><b>Cloud cover (IR)</b><small>Infrared satellite</small></div>
       <label class="toggle"><input type="checkbox" id="t-sat" checked><span class="track"></span><span class="knob"></span></label>
     </div>
     <div class="opacity-row"><span>OPACITY</span><input type="range" id="op-sat" min="0" max="100" value="72"></div>
@@ -274,6 +275,7 @@
   <div class="basemap-toggle">
     <button class="bm-btn" id="bm-day" data-style="liberty">☀︎ Day</button>
     <button class="bm-btn active" id="bm-dark" data-style="dark">☾ Dark</button>
+    <button class="bm-btn" id="bm-sat" data-style="satellite">🛰 Satellite</button>
   </div>
 </div>
 
@@ -315,7 +317,7 @@
   </div>
 </div>
 
-<div id="credits" class="float">Radar &amp; satellite <b>RainViewer</b> · Alerts <b>NWS/NOAA</b> · Base <b>OpenFreeMap</b> · Geocoding <b>OpenStreetMap</b></div>
+<div id="credits" class="float">Weather <b>RainViewer</b> · Alerts <b>NWS/NOAA</b> · Maps <b>OpenFreeMap</b> · Imagery <b>Esri/Maxar</b> · Search <b>OpenStreetMap</b></div>
 <div id="toasts"></div>
 
 <script>
@@ -329,6 +331,32 @@
     dark:"https://tiles.openfreemap.org/styles/dark",
     positron:"https://tiles.openfreemap.org/styles/positron",
     bright:"https://tiles.openfreemap.org/styles/bright"
+  };
+
+  // Photographic ground imagery basemap — Esri World Imagery (free, keyless,
+  // CORS-OK), with a transparent roads+labels reference overlay for navigation
+  // context. Built inline because it's raster tiles, not a vector style URL.
+  const SAT_STYLE = {
+    version:8,
+    sources:{
+      "esri-imagery":{
+        type:"raster",
+        tiles:["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
+        tileSize:256, maxzoom:19,
+        attribution:"Imagery © Esri, Maxar, Earthstar Geographics"
+      },
+      "esri-ref":{
+        type:"raster",
+        tiles:["https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}"],
+        tileSize:256, maxzoom:19,
+        attribution:"Esri"
+      }
+    },
+    layers:[
+      {id:"bg",type:"background",paint:{"background-color":"#04060e"}},
+      {id:"esri-imagery",type:"raster",source:"esri-imagery"},
+      {id:"esri-ref",type:"raster",source:"esri-ref",paint:{"raster-opacity":0.85}}
+    ]
   };
   const RV_INDEX = "https://api.rainviewer.com/public/weather-maps.json";
   const NWS_URL  = "https://api.weather.gov/alerts/active?status=actual&message_type=alert";
@@ -394,7 +422,7 @@
     center:[-95, 39],
     zoom:2.4,
     minZoom:1,
-    maxZoom:18,
+    maxZoom:19,
     attributionControl:false,
     hash:false,
     dragRotate:false,
@@ -670,16 +698,19 @@
     if(state.lastRadarId && state.layers.radar) setOpacity(state.lastRadarId, state.opacity.radar);
   };
 
-  // base map day/dark
+  // base map: day (vector) / dark (vector) / satellite (raster imagery)
   function switchStyle(name){
     if(state.currentStyle===name) return;
     state.currentStyle = name;
     $("bm-day").classList.toggle("active", name==="liberty");
     $("bm-dark").classList.toggle("active", name==="dark");
-    map.setStyle(STYLES[name]); // style.load handler rebuilds overlays
+    $("bm-sat").classList.toggle("active", name==="satellite");
+    const style = name==="satellite" ? SAT_STYLE : STYLES[name];
+    map.setStyle(style); // style.load handler rebuilds overlays
   }
   $("bm-day").onclick = ()=> switchStyle("liberty");
   $("bm-dark").onclick = ()=> switchStyle("dark");
+  $("bm-sat").onclick = ()=> switchStyle("satellite");
 
   /* ============================================================
      WEATHER ALERTS (NWS)
