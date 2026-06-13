@@ -4,8 +4,8 @@ import Anthropic from "@anthropic-ai/sdk";
 const PORT = Number(process.env.PORT ?? 8080);
 const APP_SHARED_SECRET = process.env.APP_SHARED_SECRET ?? "";
 const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY ?? "";
-// A calm, measured preset ("Rachel"); override via env once you've chosen a voice.
-const ELEVENLABS_VOICE_ID = process.env.ELEVENLABS_VOICE_ID ?? "21m00Tcm4TlvDq8ikWAM";
+// Defaults to the voice you selected; override with ELEVENLABS_VOICE_ID to swap.
+const ELEVENLABS_VOICE_ID = process.env.ELEVENLABS_VOICE_ID ?? "VU16byTywsWv5JpI8rbc";
 
 const anthropic = new Anthropic(); // reads ANTHROPIC_API_KEY from the environment
 
