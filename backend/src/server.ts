@@ -25,6 +25,49 @@ function requireSecret(req: Request, res: Response, next: NextFunction) {
 
 app.get("/", (_req, res) => res.json({ ok: true, service: "resonance-backend" }));
 
+// --- Temporary diagnostics: open in a browser to see why voice may fail -------
+// Reports which keys are set (booleans only — never the values) and runs one
+// tiny ElevenLabs test so we can read the exact status/error.
+app.get("/diag", async (_req, res) => {
+  const result: Record<string, unknown> = {
+    anthropicKeySet: !!process.env.ANTHROPIC_API_KEY,
+    elevenKeySet: !!ELEVENLABS_API_KEY,
+    sharedSecretSet: !!APP_SHARED_SECRET,
+    voiceId: ELEVENLABS_VOICE_ID,
+  };
+  if (ELEVENLABS_API_KEY) {
+    try {
+      const r = await fetch(
+        `https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`,
+        {
+          method: "POST",
+          headers: {
+            "xi-api-key": ELEVENLABS_API_KEY,
+            "content-type": "application/json",
+            accept: "audio/mpeg",
+          },
+          body: JSON.stringify({ text: "test", model_id: "eleven_multilingual_v2" }),
+        },
+      );
+      const tts: Record<string, unknown> = {
+        status: r.status,
+        contentType: r.headers.get("content-type") ?? "",
+      };
+      if (r.ok) {
+        tts.audioBytes = (await r.arrayBuffer()).byteLength;
+      } else {
+        tts.body = (await r.text()).slice(0, 500);
+      }
+      result.tts = tts;
+    } catch (e) {
+      result.tts = { error: String(e).slice(0, 300) };
+    }
+  } else {
+    result.tts = { skipped: "ELEVENLABS_API_KEY not set" };
+  }
+  res.json(result);
+});
+
 // --- The conversational guide --------------------------------------------------
 
 /// Hard rules the model must never violate. This is the safety spine of the
