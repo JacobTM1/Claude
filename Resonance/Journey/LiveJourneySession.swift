@@ -1,11 +1,11 @@
 import AVFoundation
 import SwiftUI
 
-/// Drives the interactive Journey of Souls: it asks the backend guide for the
-/// next turn, speaks each line in the warm backend voice, holds the pauses,
-/// and — at checkpoints — listens for the user's spoken reply and sends it
-/// back. The guide (Claude, server-side) decides the arc and always grounds
-/// the listener before completing. "Bring me back" works by voice or button.
+/// Drives the interactive Journey of Souls. The backend guide (Claude) decides
+/// the arc and always grounds the listener before completing; the warm backend
+/// voice speaks each line; an always-on on-device listener lets the user say
+/// "bring me back" at any moment and supplies their spoken replies at
+/// checkpoints from the same stream.
 @MainActor
 final class LiveJourneySession: ObservableObject {
     enum Status { case preparing, speaking, listening, finished }
@@ -14,16 +14,30 @@ final class LiveJourneySession: ObservableObject {
     @Published private(set) var phaseTitle = "Settling In"
     @Published private(set) var currentText = ""
     @Published private(set) var isFinished = false
-    @Published private(set) var errorMessage: String?
 
     private let themeName: String
     private let minutes: Int
     private let client = JourneyClient()
     private let voice = VoicePlayer()
-    private let listener = SpeechListener()
+    private let listener = ContinuousListener()
 
     private var history: [ChatMsg] = []
     private var driveTask: Task<Void, Never>?
+
+    // Checkpoint capture (drawn from the continuous transcript stream).
+    private var capturing = false
+    private var capturedReply = ""
+    private var replyContinuation: CheckedContinuation<String, Never>?
+    private var silenceWork: DispatchWorkItem?
+
+    // Once we begin returning, stop reacting to the exit phrase (and the guide
+    // itself may say "come back" during grounding).
+    private var returning = false
+
+    private let exitPhrases = [
+        "bring me back", "take me back", "i want to come back", "want to come back",
+        "wake me up", "end the session", "stop the session", "come back now",
+    ]
 
     init(themeName: String, minutes: Int) {
         self.themeName = themeName
@@ -34,26 +48,81 @@ final class LiveJourneySession: ObservableObject {
 
     func begin() {
         configureAudioSession()
-        Task { _ = await SpeechListener.requestPermissions() }
+        listener.onTranscript = { [weak self] text in
+            Task { @MainActor in self?.handleTranscript(text) }
+        }
+        Task {
+            _ = await ContinuousListener.requestPermissions()
+            self.listener.start()
+        }
         startDrive(userSpeech: nil, first: true)
     }
 
-    /// "Bring me back": stop whatever is happening and ask the guide to run
-    /// the grounding return now. The system prompt routes this to RETURN.
     func bringMeBack() {
+        guard !returning else { return }
+        returning = true
+        endCapture()
         voice.stop()
-        listener.finish()
         let phrase = "Please bring me back now."
         history.append(ChatMsg(role: "user", text: phrase))
         startDrive(userSpeech: phrase, first: false)
     }
 
-    /// Leaves the session entirely (user tapped End / closed the screen).
     func end() {
         driveTask?.cancel()
         voice.stop()
-        listener.finish()
+        listener.stop()
+        endCapture()
         deactivateAudioSession()
+    }
+
+    // MARK: - Transcript handling (always-on)
+
+    private func handleTranscript(_ text: String) {
+        let lower = text.lowercased()
+
+        // Spoken exit — works at any moment until we're already returning.
+        if !returning, exitPhrases.contains(where: { lower.contains($0) }) {
+            bringMeBack()
+            return
+        }
+
+        // Feed checkpoint capture.
+        if capturing {
+            capturedReply = text
+            armSilence()
+        }
+    }
+
+    private func awaitReply() async -> String {
+        await withCheckedContinuation { (cont: CheckedContinuation<String, Never>) in
+            replyContinuation = cont
+            capturedReply = ""
+            capturing = true
+            armSilence()
+            // Hard cap so a checkpoint never hangs.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 18) { [weak self] in
+                self?.endCapture()
+            }
+        }
+    }
+
+    private func armSilence() {
+        silenceWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.endCapture() }
+        silenceWork = work
+        // End shortly after they stop speaking.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.2, execute: work)
+    }
+
+    private func endCapture() {
+        silenceWork?.cancel()
+        silenceWork = nil
+        guard capturing else { return }
+        capturing = false
+        let cont = replyContinuation
+        replyContinuation = nil
+        cont?.resume(returning: capturedReply)
     }
 
     // MARK: - Drive loop
@@ -75,7 +144,6 @@ final class LiveJourneySession: ObservableObject {
                     history: history, userSpeech: pendingUserSpeech
                 )
             } catch {
-                // Never strand the listener — speak a gentle grounding and end.
                 await deliver(fallbackReturn())
                 return
             }
@@ -85,13 +153,14 @@ final class LiveJourneySession: ObservableObject {
             if !joined.isEmpty {
                 history.append(ChatMsg(role: "assistant", text: joined))
             }
+            if response.phase == "returning" { returning = true }
 
             await deliver(response)
             if Task.isCancelled || isFinished { return }
 
             if response.awaitingResponse {
                 status = .listening
-                let said = await listener.listen()
+                let said = await awaitReply()
                 if Task.isCancelled { return }
                 let trimmed = said.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !trimmed.isEmpty {
@@ -104,7 +173,6 @@ final class LiveJourneySession: ObservableObject {
         }
     }
 
-    /// Speaks each line and holds its pause. Honors cancellation between steps.
     private func deliver(_ response: TurnResponse) async {
         withAnimation(.easeInOut(duration: 0.8)) {
             phaseTitle = Self.title(for: response.phase)
@@ -118,29 +186,26 @@ final class LiveJourneySession: ObservableObject {
             if let audio = try? await client.tts(text: line.text), !audio.isEmpty {
                 await voice.play(audio)
             } else {
-                // No audio (e.g. TTS unavailable) — still let the line be read.
                 try? await Task.sleep(nanoseconds: 2_200_000_000)
             }
             if Task.isCancelled { return }
-
-            let pause = UInt64(max(line.pauseMsAfter, 0)) * 1_000_000
-            try? await Task.sleep(nanoseconds: pause)
+            try? await Task.sleep(nanoseconds: UInt64(max(line.pauseMsAfter, 0)) * 1_000_000)
         }
 
-        if response.sessionComplete {
-            finish()
-        }
+        if response.sessionComplete { finish() }
     }
 
     private func finish() {
         isFinished = true
         status = .finished
         voice.stop()
+        listener.stop()
         deactivateAudioSession()
     }
 
     private func fallbackReturn() -> TurnResponse {
-        TurnResponse(
+        returning = true
+        return TurnResponse(
             speech: [
                 GuideLine(text: "Let's gently begin to come back now.", pauseMsAfter: 5000),
                 GuideLine(text: "Feel the surface beneath you, and the weight of your body resting on it.", pauseMsAfter: 5000),
@@ -157,7 +222,7 @@ final class LiveJourneySession: ObservableObject {
     private func configureAudioSession() {
         let session = AVAudioSession.sharedInstance()
         try? session.setCategory(
-            .playAndRecord, mode: .spokenAudio,
+            .playAndRecord, mode: .voiceChat,
             options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP]
         )
         try? session.setActive(true)

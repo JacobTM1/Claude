@@ -21,7 +21,7 @@ struct LiveJourneySessionView: View {
 
     var body: some View {
         ZStack {
-            AuroraBackground(colors: theme.colors, intensity: 0.9)
+            CosmicBackground(colors: theme.colors)
 
             if session.isFinished {
                 reflectionView
@@ -68,13 +68,18 @@ struct LiveJourneySessionView: View {
 
             Spacer()
 
-            Button(action: session.bringMeBack) {
-                Label("Bring me back", systemImage: "arrow.down.heart")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.white.opacity(0.85))
-                    .padding(.horizontal, 22)
-                    .padding(.vertical, 12)
-                    .background(.white.opacity(0.12), in: Capsule())
+            VStack(spacing: 8) {
+                Button(action: session.bringMeBack) {
+                    Label("Bring me back", systemImage: "arrow.down.heart")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.85))
+                        .padding(.horizontal, 22)
+                        .padding(.vertical, 12)
+                        .background(.white.opacity(0.12), in: Capsule())
+                }
+                Text("…or just say “bring me back”")
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.4))
             }
             .padding(.bottom, 40)
         }
