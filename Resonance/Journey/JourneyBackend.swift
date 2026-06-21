@@ -27,6 +27,7 @@ private struct TurnRequest: Codable {
     let userSpeech: String?
     let goal: String?
     let language: String?
+    let elapsedSeconds: Int?
 }
 
 private struct TTSRequest: Codable {
@@ -59,11 +60,13 @@ struct JourneyClient {
 
     /// Asks the guide for the next turn given everything said so far.
     func turn(theme: String, minutes: Int, history: [ChatMsg], userSpeech: String?,
-              goal: String? = nil, language: String? = nil) async throws -> TurnResponse {
+              goal: String? = nil, language: String? = nil,
+              elapsedSeconds: Int? = nil) async throws -> TurnResponse {
         var req = try request(path: "/journey/turn")
         req.httpBody = try JSONEncoder().encode(
             TurnRequest(theme: theme, minutes: minutes, history: history,
-                        userSpeech: userSpeech, goal: goal, language: language)
+                        userSpeech: userSpeech, goal: goal, language: language,
+                        elapsedSeconds: elapsedSeconds)
         )
         let (data, response) = try await URLSession.shared.data(for: req)
         if let http = response as? HTTPURLResponse, http.statusCode >= 400 {

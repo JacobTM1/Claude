@@ -24,6 +24,7 @@ final class LiveJourneySession: ObservableObject {
     private let goal = UserGoalStore.phrase
     private var history: [ChatMsg] = []
     private var driveTask: Task<Void, Never>?
+    private var startedAt: Date?
 
     // Checkpoint capture (drawn from the continuous transcript stream).
     private var capturing = false
@@ -48,6 +49,7 @@ final class LiveJourneySession: ObservableObject {
     // MARK: - Lifecycle
 
     func begin() {
+        startedAt = Date()
         configureAudioSession()
         listener.onTranscript = { [weak self] text in
             Task { @MainActor in self?.handleTranscript(text) }
@@ -140,10 +142,12 @@ final class LiveJourneySession: ObservableObject {
             status = .preparing
             let response: TurnResponse
             do {
+                let elapsed = startedAt.map { Int(Date().timeIntervalSince($0)) }
                 response = try await client.turn(
                     theme: themeName, minutes: minutes,
                     history: history, userSpeech: pendingUserSpeech,
-                    goal: goal.isEmpty ? nil : goal
+                    goal: goal.isEmpty ? nil : goal,
+                    elapsedSeconds: elapsed
                 )
             } catch {
                 await deliver(fallbackReturn())
