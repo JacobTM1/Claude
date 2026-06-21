@@ -60,7 +60,7 @@ struct LiveJourneySessionView: View {
                 .animation(.easeInOut(duration: 0.5), value: spokenOrStatusText)
 
             if session.status == .listening {
-                Label("Listening — speak softly", systemImage: "waveform")
+                Label(L("Listening — speak softly", "Слушаю — говорите тихо"), systemImage: "waveform")
                     .font(.footnote.weight(.medium))
                     .foregroundStyle(.white.opacity(0.7))
                     .padding(.top, 4)
@@ -70,14 +70,14 @@ struct LiveJourneySessionView: View {
 
             VStack(spacing: 8) {
                 Button(action: session.bringMeBack) {
-                    Label("Bring me back", systemImage: "arrow.down.heart")
+                    Label(L("Bring me back", "Верни меня"), systemImage: "arrow.down.heart")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.white.opacity(0.85))
                         .padding(.horizontal, 22)
                         .padding(.vertical, 12)
                         .background(.white.opacity(0.12), in: Capsule())
                 }
-                Text("…or just say “bring me back”")
+                Text(L("…or just say “bring me back”", "…или просто скажите «верни меня»"))
                     .font(.caption2)
                     .foregroundStyle(.white.opacity(0.4))
             }
@@ -87,7 +87,7 @@ struct LiveJourneySessionView: View {
 
     private var spokenOrStatusText: String {
         if session.status == .preparing && session.currentText.isEmpty {
-            return "Settling in…"
+            return L("Settling in…", "Устраиваемся…")
         }
         return session.currentText
     }
@@ -97,10 +97,11 @@ struct LiveJourneySessionView: View {
             Image(systemName: "moon.stars.fill")
                 .font(.system(size: 52))
                 .foregroundStyle(.white)
-            Text("Welcome back")
+            Text(L("Welcome back", "С возвращением"))
                 .font(.title2.weight(.semibold))
                 .foregroundStyle(.white)
-            Text("Take a moment before moving on.\nNotice how you feel now.")
+            Text(L("Take a moment before moving on.\nNotice how you feel now.",
+                   "Не торопитесь продолжать.\nЗаметьте, как вы себя чувствуете сейчас."))
                 .font(.subheadline)
                 .foregroundStyle(.white.opacity(0.7))
                 .multilineTextAlignment(.center)
@@ -109,7 +110,7 @@ struct LiveJourneySessionView: View {
             Button {
                 dismiss()
             } label: {
-                Text("Done")
+                Text(L("Done", "Готово"))
                     .font(.headline)
                     .foregroundStyle(.white)
                     .frame(maxWidth: 220)

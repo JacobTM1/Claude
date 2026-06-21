@@ -13,6 +13,7 @@ struct SessionView: View {
     }
 
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var loc = LocalizationManager.shared
     @StateObject private var engine = ToneEngine()
     @State private var state: SessionState = .intro
     @State private var durationMinutes = 10
@@ -124,7 +125,7 @@ struct SessionView: View {
                 .glassCard()
 
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("How to practice")
+                    Text(L("How to practice", "Как практиковать"))
                         .font(.headline)
                         .foregroundStyle(.white)
                     ForEach(Array(mode.guidance.enumerated()), id: \.offset) { index, step in
@@ -175,7 +176,7 @@ struct SessionView: View {
 
     private var durationPicker: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Duration")
+            Text(L("Duration", "Длительность"))
                 .font(.headline)
                 .foregroundStyle(.white)
             HStack(spacing: 8) {
@@ -183,7 +184,7 @@ struct SessionView: View {
                     Button {
                         durationMinutes = minutes
                     } label: {
-                        Text("\(minutes)m")
+                        Text("\(minutes)" + L("m", "м"))
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(.white)
                             .frame(maxWidth: .infinity)
@@ -207,7 +208,7 @@ struct SessionView: View {
                 state = .countdown
             }
         } label: {
-            Label("Begin Session", systemImage: "play.fill")
+            Label(L("Begin Session", "Начать сессию"), systemImage: "play.fill")
                 .font(.headline)
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
@@ -223,7 +224,7 @@ struct SessionView: View {
 
     private var countdownView: some View {
         VStack(spacing: 26) {
-            Text("Settle in")
+            Text(L("Settle in", "Устройтесь поудобнее"))
                 .font(.title3.weight(.medium))
                 .foregroundStyle(.white.opacity(0.8))
 
@@ -285,7 +286,7 @@ struct SessionView: View {
 
                 if showExtend {
                     Button(action: extendSession) {
-                        Label("+5 minutes", systemImage: "plus")
+                        Label(L("+5 minutes", "+5 минут"), systemImage: "plus")
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(.white)
                             .padding(.horizontal, 18)
@@ -414,7 +415,7 @@ struct SessionView: View {
                 .monospacedDigit()
 
             if reveal < 0.4 {
-                Text("remaining")
+                Text(L("remaining", "осталось"))
                     .font(.footnote)
                     .foregroundStyle(.white.opacity(0.45))
                     .transition(.opacity.combined(with: .move(edge: .trailing)))
@@ -474,7 +475,7 @@ struct SessionView: View {
             HStack(spacing: 16) {
                 Button(action: togglePause) {
                     Label(
-                        state == .running ? "Pause" : "Resume",
+                        state == .running ? L("Pause", "Пауза") : L("Resume", "Продолжить"),
                         systemImage: state == .running ? "pause.fill" : "play.fill"
                     )
                     .font(.headline)
@@ -485,7 +486,7 @@ struct SessionView: View {
                 }
 
                 Button(action: endSession) {
-                    Label("End", systemImage: "stop.fill")
+                    Label(L("End", "Завершить"), systemImage: "stop.fill")
                         .font(.headline)
                         .foregroundStyle(.white.opacity(0.85))
                         .frame(maxWidth: .infinity)
@@ -510,7 +511,7 @@ struct SessionView: View {
                     VStack(spacing: 4) {
                         Image(systemName: sound.icon)
                             .font(.subheadline)
-                        Text(sound.rawValue)
+                        Text(sound.displayName)
                             .font(.caption2.weight(.semibold))
                     }
                     .foregroundStyle(.white.opacity(ambientChoice == sound ? 1 : 0.6))
@@ -534,10 +535,11 @@ struct SessionView: View {
             Image(systemName: "checkmark.seal.fill")
                 .font(.system(size: 56))
                 .foregroundStyle(mode.colors[0])
-            Text("Session complete")
+            Text(L("Session complete", "Сессия завершена"))
                 .font(.title2.weight(.semibold))
                 .foregroundStyle(.white)
-            Text("Take a moment before you move on.\nNotice how you feel.")
+            Text(L("Take a moment before you move on.\nNotice how you feel.",
+                   "Не торопитесь продолжать.\nЗаметьте, как вы себя чувствуете."))
                 .font(.subheadline)
                 .foregroundStyle(.white.opacity(0.6))
                 .multilineTextAlignment(.center)
@@ -545,7 +547,7 @@ struct SessionView: View {
             Button {
                 dismiss()
             } label: {
-                Text("Done")
+                Text(L("Done", "Готово"))
                     .font(.headline)
                     .foregroundStyle(.white)
                     .frame(maxWidth: 220)

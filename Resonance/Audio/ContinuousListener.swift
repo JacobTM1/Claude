@@ -15,7 +15,8 @@ final class ContinuousListener {
     /// recognition segment.
     var onTranscript: ((String) -> Void)?
 
-    private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
+    /// Recognizer for the current interface language (English or Russian).
+    private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: appLanguage.speechLocale))
     private let engine = AVAudioEngine()
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var task: SFSpeechRecognitionTask?

@@ -26,30 +26,33 @@ struct JourneyOnboardingView: View {
                         .foregroundStyle(.white)
                         .padding(.top, 12)
 
-                    Text("Journey of Souls")
+                    Text(L("Journey of Souls", "Путешествие душ"))
                         .font(.system(size: 30, weight: .bold, design: .rounded))
                         .foregroundStyle(.white)
 
-                    Text("A calm, guided inner journey")
+                    Text(L("A calm, guided inner journey", "Спокойное внутреннее путешествие с проводником"))
                         .font(.headline)
                         .foregroundStyle(.white.opacity(0.7))
 
                     card(
-                        title: "What this is",
+                        title: L("What this is", "Что это"),
                         icon: "sparkles",
-                        body: "A contemplative, guided visualization. A gentle voice leads you through relaxation and calm inner imagery, with space to notice whatever arises — or to notice nothing at all. Both are completely fine."
+                        body: L("A contemplative, guided visualization. A gentle voice leads you through relaxation and calm inner imagery, with space to notice whatever arises — or to notice nothing at all. Both are completely fine.",
+                                "Созерцательная управляемая визуализация. Мягкий голос ведёт вас через расслабление и спокойные внутренние образы, оставляя место заметить то, что приходит, — или не заметить ничего. И то и другое совершенно нормально.")
                     )
 
                     card(
-                        title: "What this isn't",
+                        title: L("What this isn't", "Чем это не является"),
                         icon: "info.circle",
-                        body: "This is inner experience, imagery, and reflection. It does not retrieve real past lives or any factual record of the past or an afterlife. It is not therapy, medical treatment, or a substitute for professional care."
+                        body: L("This is inner experience, imagery, and reflection. It does not retrieve real past lives or any factual record of the past or an afterlife. It is not therapy, medical treatment, or a substitute for professional care.",
+                                "Это внутренний опыт, образы и размышление. Это не извлечение реальных прошлых жизней и не фактическая запись прошлого или загробной жизни. Это не терапия, не лечение и не замена профессиональной помощи.")
                     )
 
                     card(
-                        title: "Before you begin",
+                        title: L("Before you begin", "Прежде чем начать"),
                         icon: "heart.text.square",
-                        body: "Find a quiet, safe place where you can sit or lie down undisturbed. Please don't use this while driving or operating machinery, during acute distress, or under the influence of alcohol or other substances. You can gently end and return at any time."
+                        body: L("Find a quiet, safe place where you can sit or lie down undisturbed. Please don't use this while driving or operating machinery, during acute distress, or under the influence of alcohol or other substances. You can gently end and return at any time.",
+                                "Найдите тихое, безопасное место, где можно сесть или лечь, не отвлекаясь. Пожалуйста, не используйте это за рулём или у механизмов, в состоянии острого стресса или под действием алкоголя и других веществ. Вы можете мягко завершить и вернуться в любой момент.")
                     )
 
                     if requiresAcknowledgment {
@@ -57,7 +60,7 @@ struct JourneyOnboardingView: View {
                             onAcknowledge()
                             dismiss()
                         }) {
-                            Text("I understand — continue")
+                            Text(L("I understand — continue", "Я понимаю — продолжить"))
                                 .font(.headline)
                                 .foregroundStyle(.white)
                                 .frame(maxWidth: .infinity)
@@ -73,7 +76,7 @@ struct JourneyOnboardingView: View {
                         }
                         .padding(.top, 6)
                     } else {
-                        Button("Done") { dismiss() }
+                        Button(L("Done", "Готово")) { dismiss() }
                             .font(.headline)
                             .foregroundStyle(.white)
                             .frame(maxWidth: .infinity)
@@ -82,7 +85,8 @@ struct JourneyOnboardingView: View {
                             .padding(.top, 6)
                     }
 
-                    Text("If you ever feel distressed, gently open your eyes and return your attention to the room around you.")
+                    Text(L("If you ever feel distressed, gently open your eyes and return your attention to the room around you.",
+                           "Если вам станет тревожно, мягко откройте глаза и верните внимание к комнате вокруг вас."))
                         .font(.footnote)
                         .foregroundStyle(.white.opacity(0.5))
                         .padding(.bottom, 24)

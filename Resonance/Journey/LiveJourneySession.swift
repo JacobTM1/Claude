@@ -11,7 +11,7 @@ final class LiveJourneySession: ObservableObject {
     enum Status { case preparing, speaking, listening, finished }
 
     @Published private(set) var status: Status = .preparing
-    @Published private(set) var phaseTitle = "Settling In"
+    @Published private(set) var phaseTitle = L("Settling In", "Устройство")
     @Published private(set) var currentText = ""
     @Published private(set) var isFinished = false
 
@@ -37,8 +37,12 @@ final class LiveJourneySession: ObservableObject {
     private var returning = false
 
     private let exitPhrases = [
+        // English
         "bring me back", "take me back", "i want to come back", "want to come back",
         "wake me up", "end the session", "stop the session", "come back now",
+        // Russian
+        "верни меня", "вернуться", "хочу вернуться", "разбуди меня",
+        "закончить", "останови", "верни обратно", "хочу обратно",
     ]
 
     init(themeName: String, minutes: Int) {
@@ -66,7 +70,7 @@ final class LiveJourneySession: ObservableObject {
         returning = true
         endCapture()
         voice.stop()
-        let phrase = "Please bring me back now."
+        let phrase = L("Please bring me back now.", "Пожалуйста, верни меня сейчас.")
         history.append(ChatMsg(role: "user", text: phrase))
         startDrive(userSpeech: phrase, first: false)
     }
@@ -147,6 +151,7 @@ final class LiveJourneySession: ObservableObject {
                     theme: themeName, minutes: minutes,
                     history: history, userSpeech: pendingUserSpeech,
                     goal: goal.isEmpty ? nil : goal,
+                    language: appLanguage.backendName,
                     elapsedSeconds: elapsed
                 )
             } catch {
@@ -213,9 +218,12 @@ final class LiveJourneySession: ObservableObject {
         returning = true
         return TurnResponse(
             speech: [
-                GuideLine(text: "Let's gently begin to come back now.", pauseMsAfter: 5000),
-                GuideLine(text: "Feel the surface beneath you, and the weight of your body resting on it.", pauseMsAfter: 5000),
-                GuideLine(text: "Take a fuller breath, and when you're ready, let your eyes open. Welcome back.", pauseMsAfter: 3000),
+                GuideLine(text: L("Let's gently begin to come back now.",
+                                  "Давайте мягко начнём возвращаться."), pauseMsAfter: 5000),
+                GuideLine(text: L("Feel the surface beneath you, and the weight of your body resting on it.",
+                                  "Почувствуйте поверхность под собой и вес тела, опирающегося на неё."), pauseMsAfter: 5000),
+                GuideLine(text: L("Take a fuller breath, and when you're ready, let your eyes open. Welcome back.",
+                                  "Сделайте более полный вдох и, когда будете готовы, откройте глаза. С возвращением."), pauseMsAfter: 3000),
             ],
             phase: "returning",
             awaitingResponse: false,
@@ -240,14 +248,14 @@ final class LiveJourneySession: ObservableObject {
 
     private static func title(for phase: String) -> String {
         switch phase {
-        case "intro": "Settling In"
-        case "induction": "Relaxing"
-        case "deepening": "Going Deeper"
-        case "journey": "The Journey"
-        case "interlife": "Between Lives"
-        case "integration": "Resting With It"
-        case "returning": "Coming Back"
-        case "reflection": "Reflection"
+        case "intro": L("Settling In", "Устройство")
+        case "induction": L("Relaxing", "Расслабление")
+        case "deepening": L("Going Deeper", "Углубление")
+        case "journey": L("The Journey", "Путешествие")
+        case "interlife": L("Between Lives", "Между жизнями")
+        case "integration": L("Resting With It", "Покой с этим")
+        case "returning": L("Coming Back", "Возвращение")
+        case "reflection": L("Reflection", "Отражение")
         default: phase.capitalized
         }
     }

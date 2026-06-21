@@ -10,6 +10,7 @@ enum HomeRoute: Hashable {
 /// choice, in the existing visual language: Path A (Frequencies & Guided
 /// Meditation) and Path B (Journey of Souls).
 struct HomeView: View {
+    @ObservedObject private var loc = LocalizationManager.shared
     @State private var showSettings = false
     @AppStorage("goalOnboardingSeen") private var goalOnboardingSeen = false
     @State private var showGoalOnboarding = false
@@ -30,8 +31,9 @@ struct HomeView: View {
 
                         NavigationLink(value: HomeRoute.frequencies) {
                             PathCard(
-                                title: "Frequencies & Guided Meditation",
-                                subtitle: "Stress relief, focus, healing, deep meditation — binaural tones with guided breath.",
+                                title: L("Frequencies & Guided Meditation", "Частоты и медитация с гидом"),
+                                subtitle: L("Stress relief, focus, healing, deep meditation — binaural tones with guided breath.",
+                                            "Снятие стресса, фокус, исцеление, глубокая медитация — бинауральные тоны с дыханием под руководством."),
                                 icon: "waveform.path",
                                 colors: [Color(red: 0.30, green: 0.30, blue: 0.78),
                                          Color(red: 0.42, green: 0.30, blue: 0.74)]
@@ -41,8 +43,9 @@ struct HomeView: View {
 
                         NavigationLink(value: HomeRoute.journey) {
                             PathCard(
-                                title: "Journey of Souls",
-                                subtitle: "A calm, guided inner journey — imagery and reflection, in your own quiet space.",
+                                title: L("Journey of Souls", "Путешествие душ"),
+                                subtitle: L("A calm, guided inner journey — imagery and reflection, in your own quiet space.",
+                                            "Спокойное внутреннее путешествие с проводником — образы и размышления в вашем тихом пространстве."),
                                 icon: "moon.stars.fill",
                                 colors: [Color(red: 0.16, green: 0.20, blue: 0.46),
                                          Color(red: 0.10, green: 0.10, blue: 0.28)],
@@ -94,7 +97,7 @@ struct HomeView: View {
             Text("Resonance")
                 .font(.system(size: 38, weight: .bold, design: .rounded))
                 .foregroundStyle(.white)
-            Text("Choose your path")
+            Text(L("Choose your path", "Выберите свой путь"))
                 .font(.subheadline)
                 .foregroundStyle(.white.opacity(0.55))
         }
@@ -127,7 +130,7 @@ private struct PathCard: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             HStack(spacing: 6) {
-                Text("Enter")
+                Text(L("Enter", "Войти"))
                 Image(systemName: "arrow.right")
             }
             .font(.subheadline.weight(.semibold))

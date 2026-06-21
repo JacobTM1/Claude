@@ -4,6 +4,7 @@ import SwiftUI
 /// toggle adaptive (LLM) content, and tune the guiding voice + pacing.
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var loc = LocalizationManager.shared
     @AppStorage("journeyAdaptiveEnabled") private var adaptiveEnabled = false
     @AppStorage("voiceRate") private var voiceRate = 0.5
     @AppStorage("voicePitch") private var voicePitch = 0.45
@@ -18,33 +19,40 @@ struct SettingsView: View {
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
-                        section("You") {
+                        section(L("Language", "Язык")) {
+                            LanguagePicker()
+                        }
+
+                        section(L("You", "Вы")) {
                             Button {
                                 showGoals = true
                             } label: {
-                                row(icon: "target", title: "Your goals", trailing: "Edit")
+                                row(icon: "target", title: L("Your goals", "Ваши цели"),
+                                    trailing: L("Edit", "Изменить"))
                             }
                             if !UserGoalStore.phrase.isEmpty {
-                                Text(UserGoalStore.phrase)
+                                Text(UserGoalStore.selectedTitles)
                                     .font(.caption)
                                     .foregroundStyle(.white.opacity(0.55))
                             }
                         }
 
-                        section("Journey of Souls") {
+                        section(L("Journey of Souls", "Путешествие душ")) {
                             Button {
                                 showOnboarding = true
                             } label: {
-                                row(icon: "book", title: "Replay intro & wellbeing guide",
-                                    trailing: "View")
+                                row(icon: "book",
+                                    title: L("Replay intro & wellbeing guide", "Повторить вступление и памятку"),
+                                    trailing: L("View", "Открыть"))
                             }
 
                             Toggle(isOn: $adaptiveEnabled) {
                                 VStack(alignment: .leading, spacing: 3) {
-                                    Label("Adaptive guidance", systemImage: "wand.and.stars")
+                                    Label(L("Adaptive guidance", "Адаптивное ведение"), systemImage: "wand.and.stars")
                                         .font(.subheadline.weight(.medium))
                                         .foregroundStyle(.white)
-                                    Text("Vary scripts with AI when available. Off uses the built-in guided scripts (works offline).")
+                                    Text(L("Vary scripts with AI when available. Off uses the built-in guided scripts (works offline).",
+                                           "Менять сценарии с помощью ИИ, когда доступно. Выкл — встроенные сценарии (работают офлайн)."))
                                         .font(.caption)
                                         .foregroundStyle(.white.opacity(0.55))
                                 }
@@ -53,11 +61,14 @@ struct SettingsView: View {
                             .padding(.vertical, 4)
                         }
 
-                        section("Guiding voice") {
-                            slider("Speed", value: $voiceRate, low: "Slow", high: "Faster")
-                            slider("Pitch", value: $voicePitch, low: "Low", high: "High")
-                            slider("Volume", value: $voiceVolume, low: "Soft", high: "Loud")
-                            Text("Changes apply to your next journey.")
+                        section(L("Guiding voice", "Голос гида")) {
+                            slider(L("Speed", "Скорость"), value: $voiceRate,
+                                   low: L("Slow", "Медленно"), high: L("Faster", "Быстрее"))
+                            slider(L("Pitch", "Тон"), value: $voicePitch,
+                                   low: L("Low", "Низкий"), high: L("High", "Высокий"))
+                            slider(L("Volume", "Громкость"), value: $voiceVolume,
+                                   low: L("Soft", "Тихо"), high: L("Loud", "Громко"))
+                            Text(L("Changes apply to your next journey.", "Изменения применятся к следующему путешествию."))
                                 .font(.caption)
                                 .foregroundStyle(.white.opacity(0.5))
                         }
@@ -65,11 +76,11 @@ struct SettingsView: View {
                     .padding(20)
                 }
             }
-            .navigationTitle("Settings")
+            .navigationTitle(L("Settings", "Настройки"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") { dismiss() }
+                    Button(L("Done", "Готово")) { dismiss() }
                         .foregroundStyle(.white)
                 }
             }

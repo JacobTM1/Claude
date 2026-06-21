@@ -8,6 +8,7 @@ struct GoalOnboardingView: View {
     var onComplete: () -> Void = {}
 
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var loc = LocalizationManager.shared
     @AppStorage("goalOnboardingSeen") private var seen = false
     @State private var selected: Set<String> = UserGoalStore.selected
 
@@ -21,15 +22,25 @@ struct GoalOnboardingView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text(isEditing ? "Your goals" : "What brings you here?")
+                        Text(isEditing ? L("Your goals", "Ваши цели")
+                                       : L("What brings you here?", "Что привело вас сюда?"))
                             .font(.system(size: 30, weight: .bold, design: .rounded))
                             .foregroundStyle(.white)
-                        Text("Pick what matters to you. Your guide will tailor each session to it. You can change this anytime.")
+                        Text(L("Pick what matters to you. Your guide will tailor each session to it. You can change this anytime.",
+                               "Выберите то, что важно для вас. Гид подстроит каждую сессию под это. Вы можете изменить выбор в любой момент."))
                             .font(.subheadline)
                             .foregroundStyle(.white.opacity(0.65))
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     .padding(.top, 16)
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(L("Language", "Язык").uppercased())
+                            .font(.caption.weight(.semibold))
+                            .tracking(1.5)
+                            .foregroundStyle(.white.opacity(0.45))
+                        LanguagePicker()
+                    }
 
                     LazyVGrid(columns: columns, spacing: 12) {
                         ForEach(UserGoal.allCases) { goal in
@@ -38,7 +49,7 @@ struct GoalOnboardingView: View {
                     }
 
                     Button(action: complete) {
-                        Text(isEditing ? "Save" : "Continue")
+                        Text(isEditing ? L("Save", "Сохранить") : L("Continue", "Продолжить"))
                             .font(.headline)
                             .foregroundStyle(.white)
                             .frame(maxWidth: .infinity)
@@ -75,7 +86,7 @@ struct GoalOnboardingView: View {
                     .foregroundStyle(.white)
                     .frame(width: 42, height: 42)
                     .background(.white.opacity(0.14), in: Circle())
-                Text(goal.rawValue)
+                Text(goal.title)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.white)
                     .multilineTextAlignment(.leading)

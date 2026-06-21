@@ -16,13 +16,13 @@ enum JourneyPhase: Int, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .intro: "Settling In"
-        case .induction: "Relaxing"
-        case .deepening: "Going Deeper"
-        case .journey: "The Journey"
-        case .integration: "Resting With It"
-        case .returning: "Coming Back"
-        case .reflection: "Reflection"
+        case .intro: L("Settling In", "Устройство")
+        case .induction: L("Relaxing", "Расслабление")
+        case .deepening: L("Going Deeper", "Углубление")
+        case .journey: L("The Journey", "Путешествие")
+        case .integration: L("Resting With It", "Покой с этим")
+        case .returning: L("Coming Back", "Возвращение")
+        case .reflection: L("Reflection", "Отражение")
         }
     }
 
@@ -59,11 +59,11 @@ struct JourneyTheme: Identifiable {
     /// consistent and safe.
     let journeyLines: [ScriptLine]
 
-    static let all: [JourneyTheme] = [
+    static var all: [JourneyTheme] { [
         JourneyTheme(
             id: "meet-your-soul",
-            name: "Meet Your Soul",
-            tagline: "Sense the part of you beyond this life",
+            name: L("Meet Your Soul", "Встреча с душой"),
+            tagline: L("Sense the part of you beyond this life", "Почувствуй часть себя за пределами этой жизни"),
             icon: "sparkles",
             colors: [Color(red: 0.32, green: 0.20, blue: 0.56), Color(red: 0.06, green: 0.04, blue: 0.20)],
             ambient: .wind,
@@ -79,8 +79,8 @@ struct JourneyTheme: Identifiable {
         ),
         JourneyTheme(
             id: "past-life",
-            name: "Explore a Past Life",
-            tagline: "Wander into a life that may have been",
+            name: L("Explore a Past Life", "Исследовать прошлую жизнь"),
+            tagline: L("Wander into a life that may have been", "Загляни в жизнь, которая могла быть"),
             icon: "hourglass",
             colors: [Color(red: 0.20, green: 0.16, blue: 0.48), Color(red: 0.05, green: 0.05, blue: 0.18)],
             ambient: .ocean,
@@ -96,8 +96,8 @@ struct JourneyTheme: Identifiable {
         ),
         JourneyTheme(
             id: "meet-a-guide",
-            name: "Meet a Guide",
-            tagline: "Sense a wise, kind presence",
+            name: L("Meet a Guide", "Встреча с проводником"),
+            tagline: L("Sense a wise, kind presence", "Почувствуй мудрое, доброе присутствие"),
             icon: "moon.stars.fill",
             colors: [Color(red: 0.16, green: 0.26, blue: 0.52), Color(red: 0.04, green: 0.07, blue: 0.22)],
             ambient: .wind,
@@ -113,8 +113,8 @@ struct JourneyTheme: Identifiable {
         ),
         JourneyTheme(
             id: "heal-a-wound",
-            name: "Heal an Old Wound",
-            tagline: "Gently release something you've carried",
+            name: L("Heal an Old Wound", "Исцелить старую рану"),
+            tagline: L("Gently release something you've carried", "Мягко отпусти то, что несёшь"),
             icon: "heart.circle.fill",
             colors: [Color(red: 0.34, green: 0.18, blue: 0.40), Color(red: 0.08, green: 0.05, blue: 0.18)],
             ambient: .ocean,
@@ -128,5 +128,4 @@ struct JourneyTheme: Identifiable {
                 ScriptLine(phase: .journey, text: "Notice any small sense of lightness, and let it spread, slowly, through you.", pauseMs: 10000),
             ]
         ),
-    ]
-}
+    ] }

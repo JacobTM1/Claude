@@ -18,6 +18,17 @@ enum AmbientSound: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
+    /// Localized label for the picker; `rawValue` stays a stable English key.
+    var displayName: String {
+        switch self {
+        case .off: L("Off", "Выкл")
+        case .rain: L("Rain", "Дождь")
+        case .ocean: L("Ocean", "Океан")
+        case .wind: L("Wind", "Ветер")
+        case .fire: L("Fire", "Огонь")
+        }
+    }
+
     var icon: String {
         switch self {
         case .off: "speaker.slash.fill"

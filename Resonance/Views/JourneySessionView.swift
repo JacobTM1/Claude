@@ -63,7 +63,7 @@ struct JourneySessionView: View {
 
             Spacer().frame(height: 36)
 
-            Text(session.isPreparing ? "Settling in…" : session.currentLine)
+            Text(session.isPreparing ? L("Settling in…", "Устраиваемся…") : session.currentLine)
                 .font(.title3.weight(.regular))
                 .foregroundStyle(.white.opacity(0.92))
                 .multilineTextAlignment(.center)
@@ -94,7 +94,7 @@ struct JourneySessionView: View {
 
             // Bring me back — always present, always reachable.
             Button(action: session.bringMeBack) {
-                Label(session.isReturning ? "Returning…" : "Bring me back",
+                Label(session.isReturning ? L("Returning…", "Возвращаемся…") : L("Bring me back", "Верни меня"),
                       systemImage: "arrow.down.heart")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.white.opacity(0.85))
@@ -113,10 +113,11 @@ struct JourneySessionView: View {
             Image(systemName: "moon.stars.fill")
                 .font(.system(size: 52))
                 .foregroundStyle(.white)
-            Text("Welcome back")
+            Text(L("Welcome back", "С возвращением"))
                 .font(.title2.weight(.semibold))
                 .foregroundStyle(.white)
-            Text("Take a moment before moving on.\nNotice how you feel now,\ncompared to when you began.")
+            Text(L("Take a moment before moving on.\nNotice how you feel now,\ncompared to when you began.",
+                   "Не торопитесь продолжать.\nЗаметьте, как вы себя чувствуете сейчас,\nпо сравнению с началом."))
                 .font(.subheadline)
                 .foregroundStyle(.white.opacity(0.7))
                 .multilineTextAlignment(.center)
@@ -125,7 +126,7 @@ struct JourneySessionView: View {
             Button {
                 dismiss()
             } label: {
-                Text("Done")
+                Text(L("Done", "Готово"))
                     .font(.headline)
                     .foregroundStyle(.white)
                     .frame(maxWidth: 220)
@@ -147,15 +148,16 @@ struct JourneySessionView: View {
         ZStack {
             Color.black.opacity(0.5).ignoresSafeArea()
             VStack(spacing: 18) {
-                Text("Still here?")
+                Text(L("Still here?", "Вы здесь?"))
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(.white)
-                Text("Your journey is paused. Take your time —\nyou can continue, or gently come back.")
+                Text(L("Your journey is paused. Take your time —\nyou can continue, or gently come back.",
+                       "Ваше путешествие на паузе. Не спешите —\nможно продолжить или мягко вернуться."))
                     .font(.subheadline)
                     .foregroundStyle(.white.opacity(0.7))
                     .multilineTextAlignment(.center)
                 HStack(spacing: 14) {
-                    Button("Continue") {
+                    Button(L("Continue", "Продолжить")) {
                         session.showCheckIn = false
                         session.togglePause()
                     }
@@ -164,7 +166,7 @@ struct JourneySessionView: View {
                     .padding(.vertical, 12).frame(maxWidth: .infinity)
                     .background(.white.opacity(0.14), in: Capsule())
 
-                    Button("Bring me back") {
+                    Button(L("Bring me back", "Верни меня")) {
                         session.showCheckIn = false
                         session.bringMeBack()
                     }

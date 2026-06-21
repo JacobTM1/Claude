@@ -85,7 +85,7 @@ struct BreathingGuideView: View {
                 .opacity(isActive ? 1 : 0.7)
 
                 VStack(spacing: 10) {
-                    Text(isActive ? now.label.uppercased() : "PAUSED")
+                    Text(isActive ? now.label.uppercased() : L("PAUSED", "ПАУЗА"))
                         .font(.subheadline.weight(.semibold))
                         .tracking(4.5)
                         .foregroundStyle(.white.opacity(0.78))
@@ -226,7 +226,7 @@ struct BreathingGuideView: View {
     ) {
         let cycle = pattern.cycleSeconds
         guard cycle > 0, let first = spans.first else {
-            return (0, "Ready", 0, .hold, 0)
+            return (0, L("Ready", "Готовы"), 0, .hold, 0)
         }
         let position = elapsed.truncatingRemainder(dividingBy: cycle)
         var span = first

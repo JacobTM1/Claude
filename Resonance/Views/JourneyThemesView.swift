@@ -19,6 +19,7 @@ struct JourneyEntryView: View {
 }
 
 struct JourneyThemesView: View {
+    @ObservedObject private var loc = LocalizationManager.shared
     @AppStorage("journeyAdaptiveEnabled") private var adaptiveEnabled = false
     @State private var selectedTheme: JourneyTheme?
     @State private var deep = false   // false = Gentle (~12 min), true = Deep (~25 min)
@@ -34,10 +35,10 @@ struct JourneyThemesView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Journey of Souls")
+                        Text(L("Journey of Souls", "Путешествие душ"))
                             .font(.system(size: 30, weight: .bold, design: .rounded))
                             .foregroundStyle(.white)
-                        Text("Choose where to journey")
+                        Text(L("Choose where to journey", "Выберите, куда отправиться"))
                             .font(.subheadline)
                             .foregroundStyle(.white.opacity(0.6))
                     }
@@ -55,7 +56,8 @@ struct JourneyThemesView: View {
                     depthPicker
                     beginButton
 
-                    Text("A gentle voice will guide you. You can say “bring me back” at any moment — it will always return you calmly before ending.")
+                    Text(L("A gentle voice will guide you. You can say “bring me back” at any moment — it will always return you calmly before ending.",
+                           "Мягкий голос будет вести вас. Вы можете сказать «верни меня» в любой момент — он всегда спокойно вернёт вас перед завершением."))
                         .font(.footnote)
                         .foregroundStyle(.white.opacity(0.45))
                         .padding(.bottom, 28)
@@ -63,7 +65,7 @@ struct JourneyThemesView: View {
                 .padding(.horizontal, 20)
             }
         }
-        .navigationTitle("Journey of Souls")
+        .navigationTitle(L("Journey of Souls", "Путешествие душ"))
         .navigationBarTitleDisplayMode(.inline)
         .fullScreenCover(isPresented: $launch) {
             if let theme = selectedTheme {
@@ -79,12 +81,12 @@ struct JourneyThemesView: View {
 
     private var depthPicker: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Depth")
+            Text(L("Depth", "Глубина"))
                 .font(.headline)
                 .foregroundStyle(.white)
             HStack(spacing: 10) {
-                depthOption(title: "Gentle", subtitle: "~12 min", isDeep: false)
-                depthOption(title: "Deep", subtitle: "~25 min", isDeep: true)
+                depthOption(title: L("Gentle", "Мягко"), subtitle: L("~12 min", "~12 мин"), isDeep: false)
+                depthOption(title: L("Deep", "Глубоко"), subtitle: L("~25 min", "~25 мин"), isDeep: true)
             }
         }
     }
@@ -114,7 +116,7 @@ struct JourneyThemesView: View {
         Button {
             launch = selectedTheme != nil
         } label: {
-            Label("Begin Journey", systemImage: "play.fill")
+            Label(L("Begin Journey", "Начать путешествие"), systemImage: "play.fill")
                 .font(.headline)
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)

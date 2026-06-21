@@ -4,6 +4,7 @@ import SwiftUI
 /// modes. Lifted verbatim out of the old home screen so nothing about this
 /// path changes; only its entry point moved up a level.
 struct FrequenciesView: View {
+    @ObservedObject private var loc = LocalizationManager.shared
     @State private var showScience = false
 
     private let columns = [
@@ -37,7 +38,7 @@ struct FrequenciesView: View {
                 .padding(.bottom, 32)
             }
         }
-        .navigationTitle("Frequencies")
+        .navigationTitle(L("Frequencies", "Частоты"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -59,7 +60,8 @@ struct FrequenciesView: View {
             Image(systemName: "airpods.max")
                 .font(.title3)
                 .foregroundStyle(.white.opacity(0.85))
-            Text("Wear headphones — binaural beats need a different tone in each ear.")
+            Text(L("Wear headphones — binaural beats need a different tone in each ear.",
+                   "Наденьте наушники — бинауральным ритмам нужен разный тон в каждом ухе."))
                 .font(.footnote)
                 .foregroundStyle(.white.opacity(0.7))
                 .fixedSize(horizontal: false, vertical: true)
