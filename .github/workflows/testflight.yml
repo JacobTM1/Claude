@@ -1,10 +1,10 @@
 name: Upload to TestFlight
 
+# Manual only: each signed archive creates an Apple signing certificate on the
+# fresh runner, and Apple caps how many you can have. Running on every push
+# exhausted that quota, so TestFlight uploads are now triggered by hand when
+# you actually want to ship a build. (build-ios.yml still verifies every push.)
 on:
-  push:
-    branches:
-      - claude/meditation-frequency-app-emxor7
-      - main
   workflow_dispatch:
 
 jobs:
