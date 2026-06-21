@@ -21,6 +21,7 @@ final class LiveJourneySession: ObservableObject {
     private let voice = VoicePlayer()
     private let listener = ContinuousListener()
 
+    private let goal = UserGoalStore.phrase
     private var history: [ChatMsg] = []
     private var driveTask: Task<Void, Never>?
 
@@ -141,7 +142,8 @@ final class LiveJourneySession: ObservableObject {
             do {
                 response = try await client.turn(
                     theme: themeName, minutes: minutes,
-                    history: history, userSpeech: pendingUserSpeech
+                    history: history, userSpeech: pendingUserSpeech,
+                    goal: goal.isEmpty ? nil : goal
                 )
             } catch {
                 await deliver(fallbackReturn())

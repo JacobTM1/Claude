@@ -11,6 +11,8 @@ enum HomeRoute: Hashable {
 /// Meditation) and Path B (Journey of Souls).
 struct HomeView: View {
     @State private var showSettings = false
+    @AppStorage("goalOnboardingSeen") private var goalOnboardingSeen = false
+    @State private var showGoalOnboarding = false
 
     var body: some View {
         NavigationStack {
@@ -77,6 +79,12 @@ struct HomeView: View {
             }
             .sheet(isPresented: $showSettings) {
                 SettingsView()
+            }
+            .fullScreenCover(isPresented: $showGoalOnboarding) {
+                GoalOnboardingView().preferredColorScheme(.dark)
+            }
+            .onAppear {
+                if !goalOnboardingSeen { showGoalOnboarding = true }
             }
         }
     }

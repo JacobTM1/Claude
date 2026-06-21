@@ -9,6 +9,7 @@ struct SettingsView: View {
     @AppStorage("voicePitch") private var voicePitch = 0.45
     @AppStorage("voiceVolume") private var voiceVolume = 0.95
     @State private var showOnboarding = false
+    @State private var showGoals = false
 
     var body: some View {
         NavigationStack {
@@ -17,6 +18,19 @@ struct SettingsView: View {
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
+                        section("You") {
+                            Button {
+                                showGoals = true
+                            } label: {
+                                row(icon: "target", title: "Your goals", trailing: "Edit")
+                            }
+                            if !UserGoalStore.phrase.isEmpty {
+                                Text(UserGoalStore.phrase)
+                                    .font(.caption)
+                                    .foregroundStyle(.white.opacity(0.55))
+                            }
+                        }
+
                         section("Journey of Souls") {
                             Button {
                                 showOnboarding = true
@@ -62,6 +76,9 @@ struct SettingsView: View {
             .sheet(isPresented: $showOnboarding) {
                 JourneyOnboardingView(requiresAcknowledgment: false)
                     .preferredColorScheme(.dark)
+            }
+            .sheet(isPresented: $showGoals) {
+                GoalOnboardingView(isEditing: true).preferredColorScheme(.dark)
             }
         }
         .preferredColorScheme(.dark)
