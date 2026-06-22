@@ -20,6 +20,7 @@ final class LiveJourneySession: ObservableObject {
     private let client = JourneyClient()
     private let voice = VoicePlayer()
     private let listener = ContinuousListener()
+    private let bed = AmbientBedPlayer()
 
     private let goal = UserGoalStore.phrase
     private var history: [ChatMsg] = []
@@ -55,6 +56,7 @@ final class LiveJourneySession: ObservableObject {
     func begin() {
         startedAt = Date()
         configureAudioSession()
+        bed.start()
         listener.onTranscript = { [weak self] text in
             Task { @MainActor in self?.handleTranscript(text) }
         }
@@ -79,6 +81,7 @@ final class LiveJourneySession: ObservableObject {
         driveTask?.cancel()
         voice.stop()
         listener.stop()
+        bed.stop()
         endCapture()
         deactivateAudioSession()
     }
@@ -107,8 +110,9 @@ final class LiveJourneySession: ObservableObject {
             capturedReply = ""
             capturing = true
             armSilence()
-            // Hard cap so a checkpoint never hangs.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 18) { [weak self] in
+            // Generous hard cap so a thoughtful, slow answer is never cut off,
+            // but a checkpoint still can't hang forever.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 45) { [weak self] in
                 self?.endCapture()
             }
         }
@@ -118,8 +122,9 @@ final class LiveJourneySession: ObservableObject {
         silenceWork?.cancel()
         let work = DispatchWorkItem { [weak self] in self?.endCapture() }
         silenceWork = work
-        // End shortly after they stop speaking.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.2, execute: work)
+        // Wait a little longer after they stop, so a mid-thought pause doesn't
+        // cut them off — a real listener lets you gather your words.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.6, execute: work)
     }
 
     private func endCapture() {
@@ -190,17 +195,26 @@ final class LiveJourneySession: ObservableObject {
         }
         status = .speaking
 
-        for line in response.speech {
+        let lines = response.speech
+        for (i, line) in lines.enumerated() {
             if Task.isCancelled { return }
             withAnimation(.easeInOut(duration: 0.6)) { currentText = line.text }
 
             if let audio = try? await client.tts(text: line.text), !audio.isEmpty {
                 await voice.play(audio)
             } else {
-                try? await Task.sleep(nanoseconds: 2_200_000_000)
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
             }
             if Task.isCancelled { return }
-            try? await Task.sleep(nanoseconds: UInt64(max(line.pauseMsAfter, 0)) * 1_000_000)
+
+            // On the last line of a turn that expects a reply, don't sit in a
+            // trailing pause — go straight to listening so an answer given the
+            // instant he finishes asking is always heard (no dead "window").
+            if i == lines.count - 1 && response.awaitingResponse { break }
+
+            // Clamp pauses so silence never feels like the app froze.
+            let pauseMs = min(max(line.pauseMsAfter, 0), 4500)
+            try? await Task.sleep(nanoseconds: UInt64(pauseMs) * 1_000_000)
         }
 
         if response.sessionComplete { finish() }
@@ -211,6 +225,7 @@ final class LiveJourneySession: ObservableObject {
         status = .finished
         voice.stop()
         listener.stop()
+        bed.stop()
         deactivateAudioSession()
     }
 

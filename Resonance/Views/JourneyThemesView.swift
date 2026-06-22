@@ -22,10 +22,11 @@ struct JourneyThemesView: View {
     @ObservedObject private var loc = LocalizationManager.shared
     @AppStorage("journeyAdaptiveEnabled") private var adaptiveEnabled = false
     @State private var selectedTheme: JourneyTheme?
-    @State private var deep = false   // false = Gentle (~12 min), true = Deep (~25 min)
     @State private var launch = false
 
-    private var minutes: Int { deep ? 25 : 12 }
+    // One paced experience. The arc completes naturally and always grounds
+    // before ending; this is only an internal pacing budget, not shown.
+    private let minutes = 22
 
     var body: some View {
         ZStack {
@@ -53,7 +54,6 @@ struct JourneyThemesView: View {
                         .buttonStyle(.plain)
                     }
 
-                    depthPicker
                     beginButton
 
                     Text(L("A gentle voice will guide you. You can say “bring me back” at any moment — it will always return you calmly before ending.",
@@ -77,39 +77,6 @@ struct JourneyThemesView: View {
                 }
             }
         }
-    }
-
-    private var depthPicker: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(L("Depth", "Глубина"))
-                .font(.headline)
-                .foregroundStyle(.white)
-            HStack(spacing: 10) {
-                depthOption(title: L("Gentle", "Мягко"), subtitle: L("~12 min", "~12 мин"), isDeep: false)
-                depthOption(title: L("Deep", "Глубоко"), subtitle: L("~25 min", "~25 мин"), isDeep: true)
-            }
-        }
-    }
-
-    private func depthOption(title: String, subtitle: String, isDeep: Bool) -> some View {
-        Button {
-            deep = isDeep
-        } label: {
-            VStack(spacing: 3) {
-                Text(title).font(.subheadline.weight(.semibold))
-                Text(subtitle).font(.caption2).opacity(0.7)
-            }
-            .foregroundStyle(.white)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 12)
-            .background(
-                deep == isDeep
-                    ? AnyShapeStyle(Color(red: 0.4, green: 0.34, blue: 0.78).opacity(0.7))
-                    : AnyShapeStyle(.white.opacity(0.07)),
-                in: RoundedRectangle(cornerRadius: 16, style: .continuous)
-            )
-        }
-        .buttonStyle(.plain)
     }
 
     private var beginButton: some View {
