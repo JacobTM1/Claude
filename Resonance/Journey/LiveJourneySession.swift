@@ -20,7 +20,6 @@ final class LiveJourneySession: ObservableObject {
     private let client = JourneyClient()
     private let voice = VoicePlayer()
     private let listener = ContinuousListener()
-    private let bed = AmbientBedPlayer()
 
     private let goal = UserGoalStore.phrase
     private var history: [ChatMsg] = []
@@ -37,13 +36,15 @@ final class LiveJourneySession: ObservableObject {
     // itself may say "come back" during grounding).
     private var returning = false
 
+    // Deliberately tight: only unambiguous, first-person commands the guide
+    // would never utter himself, so his own (partially echo-leaked) narration
+    // can't falsely end the session. Short/common words like "back", "return",
+    // "stop" are intentionally excluded.
     private let exitPhrases = [
         // English
-        "bring me back", "take me back", "i want to come back", "want to come back",
-        "wake me up", "end the session", "stop the session", "come back now",
+        "bring me back", "take me back", "wake me up",
         // Russian
-        "верни меня", "вернуться", "хочу вернуться", "разбуди меня",
-        "закончить", "останови", "верни обратно", "хочу обратно",
+        "верни меня", "разбуди меня", "хочу вернуться",
     ]
 
     init(themeName: String, minutes: Int) {
@@ -56,7 +57,6 @@ final class LiveJourneySession: ObservableObject {
     func begin() {
         startedAt = Date()
         configureAudioSession()
-        bed.start()
         listener.onTranscript = { [weak self] text in
             Task { @MainActor in self?.handleTranscript(text) }
         }
@@ -81,7 +81,6 @@ final class LiveJourneySession: ObservableObject {
         driveTask?.cancel()
         voice.stop()
         listener.stop()
-        bed.stop()
         endCapture()
         deactivateAudioSession()
     }
@@ -110,9 +109,9 @@ final class LiveJourneySession: ObservableObject {
             capturedReply = ""
             capturing = true
             armSilence()
-            // Generous hard cap so a thoughtful, slow answer is never cut off,
-            // but a checkpoint still can't hang forever.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 45) { [weak self] in
+            // Hard cap so a checkpoint can't hang, but long enough not to cut
+            // off a slow, thoughtful answer.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 25) { [weak self] in
                 self?.endCapture()
             }
         }
@@ -144,6 +143,17 @@ final class LiveJourneySession: ObservableObject {
         driveTask = Task { await self.loop(initialUserSpeech: userSpeech, first: first) }
     }
 
+    private func requestTurn(userSpeech: String?) async throws -> TurnResponse {
+        let elapsed = startedAt.map { Int(Date().timeIntervalSince($0)) }
+        return try await client.turn(
+            theme: themeName, minutes: minutes,
+            history: history, userSpeech: userSpeech,
+            goal: goal.isEmpty ? nil : goal,
+            language: appLanguage.backendName,
+            elapsedSeconds: elapsed
+        )
+    }
+
     private func loop(initialUserSpeech: String?, first: Bool) async {
         var pendingUserSpeech = first ? nil : initialUserSpeech
 
@@ -151,17 +161,19 @@ final class LiveJourneySession: ObservableObject {
             status = .preparing
             let response: TurnResponse
             do {
-                let elapsed = startedAt.map { Int(Date().timeIntervalSince($0)) }
-                response = try await client.turn(
-                    theme: themeName, minutes: minutes,
-                    history: history, userSpeech: pendingUserSpeech,
-                    goal: goal.isEmpty ? nil : goal,
-                    language: appLanguage.backendName,
-                    elapsedSeconds: elapsed
-                )
+                response = try await requestTurn(userSpeech: pendingUserSpeech)
             } catch {
-                await deliver(fallbackReturn())
-                return
+                // A single transient failure must not end the journey. Wait a
+                // moment and try once more before falling back to grounding.
+                if Task.isCancelled { return }
+                try? await Task.sleep(nanoseconds: 1_800_000_000)
+                if Task.isCancelled { return }
+                do {
+                    response = try await requestTurn(userSpeech: pendingUserSpeech)
+                } catch {
+                    await deliver(fallbackReturn())
+                    return
+                }
             }
             if Task.isCancelled { return }
 
@@ -225,7 +237,6 @@ final class LiveJourneySession: ObservableObject {
         status = .finished
         voice.stop()
         listener.stop()
-        bed.stop()
         deactivateAudioSession()
     }
 
